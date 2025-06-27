@@ -14,7 +14,7 @@ const StockManagement = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/products');
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/products');
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       setProducts(data.sort((a, b) => a._id - b._id)); // Sort by ID
@@ -35,7 +35,7 @@ const handleStockSubmit = async (e) => {
       throw new Error('Please select a valid product');
     }
 
-    const response = await fetch('http://localhost:5000/api/products/stock', {
+    const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

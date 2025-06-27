@@ -13,6 +13,8 @@ const Billing = () => {
   const [customerName, setCustomerName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [error, setError] = useState(null);
   
   const productIdRefs = useRef([]);
   const quantityRefs = useRef([]);
@@ -20,12 +22,21 @@ const Billing = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/products');
+        setLoadingProducts(true);
+        setError(null);
+        const response = await fetch('https://billing-server-gaha.onrender.com/api/products');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         setProducts(data);
       } catch (err) {
         console.error('Error fetching products:', err);
-        alert('Failed to load products');
+        setError('Failed to load products. Please try again later.');
+      } finally {
+        setLoadingProducts(false);
       }
     };
 
@@ -71,6 +82,12 @@ const Billing = () => {
           setActiveField('quantity');
         }
       } else if (field === 'quantity') {
+        const product = products.find(p => p._id === parseInt(billItems[index].productId));
+        if (product && parseInt(billItems[index].quantity) > product.stock) {
+          alert(`Only ${product.stock} items available for ${product.nameTamil}`);
+          return;
+        }
+
         if (billItems[index].quantity) {
           if (index === billItems.length - 1) {
             setBillItems([...billItems, { 
@@ -84,22 +101,6 @@ const Billing = () => {
           setActiveField('productId');
         }
       }
-    } else if (e.key === 'ArrowUp' && index > 0) {
-      e.preventDefault();
-      setActiveRow(index - 1);
-      setActiveField(field);
-    } else if (e.key === 'ArrowDown' && index < billItems.length - 1) {
-      e.preventDefault();
-      setActiveRow(index + 1);
-      setActiveField(field);
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      if (field === 'productId') {
-        setActiveField('quantity');
-      } else if (index < billItems.length - 1) {
-        setActiveRow(index + 1);
-        setActiveField('productId');
-      }
     }
   };
 
@@ -111,6 +112,17 @@ const Billing = () => {
   const grandTotal = billItems.reduce((sum, item) => sum + calculateTotal(item), 0);
 
   const handleCreateBill = async () => {
+    // First validate all quantities
+    for (const item of billItems) {
+      if (item.productId && item.quantity) {
+        const product = products.find(p => p._id === parseInt(item.productId));
+        if (product && parseInt(item.quantity) > product.stock) {
+          alert(`Insufficient stock for ${product.nameTamil}. Available: ${product.stock}`);
+          return;
+        }
+      }
+    }
+
     const validItems = billItems
       .filter(item => item.productId && item.quantity)
       .map(item => ({
@@ -123,8 +135,13 @@ const Billing = () => {
       return;
     }
 
+    if (!customerName || !mobileNumber) {
+      alert('Please enter customer name and mobile number');
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:5000/api/bills', {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,19 +155,33 @@ const Billing = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Handle specific stock error
+        if (errorData.availableStock !== undefined) {
+          throw new Error(`${errorData.message}. Please adjust your quantity.`);
+        }
         throw new Error(errorData.message || 'Failed to create bill');
       }
 
       const data = await response.json();
       alert('Bill created successfully!');
+      
+      // Refresh products to get updated stock levels
+      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
+      const updatedProducts = await productsResponse.json();
+      setProducts(updatedProducts);
+      
+      // Reset form
       setBillItems([{ productId: '', quantity: '', productName: '', price: 0 }]);
       setActiveRow(0);
       setActiveField('productId');
+      setCustomerName('');
+      setMobileNumber('');
     } catch (err) {
       console.error('Error creating bill:', err);
       alert(err.message);
     }
   };
+
 
   const handlePrint = () => {
     if (billItems.filter(item => item.productId && item.quantity).length === 0) {
@@ -164,12 +195,10 @@ const Billing = () => {
 
     setIsPrinting(true);
     
-    // Get current date and time in Tamil format
     const now = new Date();
     const date = now.toLocaleDateString('ta-IN');
     const time = now.toLocaleTimeString('ta-IN');
 
-    // Create a print window
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Popup was blocked. Please allow popups for this site.');
@@ -177,92 +206,129 @@ const Billing = () => {
       return;
     }
 
-    // Generate the bill content
-    const billContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>கேஷ் பில்</title>
-          <meta charset="UTF-8">
-          <style>
-            @page { 
-              size: 58mm;
-              margin: 0;
-            }
-            body { 
-              width: 58mm;
-              margin: 0;
-              font-family: 'Arial Unicode MS', 'Tahoma', sans-serif;
-              font-size: 10px;
-              line-height: 1.2;
-            }
-            h2, h3 {
-              margin: 2px 0;
-              text-align: center;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-            }
-            th, td {
-              padding: 2px;
-              border-bottom: 1px dashed #000;
-            }
-            .text-end {
-              text-align: right;
-            }
-            .text-center {
-              text-align: center;
-            }
-          </style>
-        </head>
-        <body>
-          <h2>ராஜா ஸ்னாக்ஸ்</h2>
-          <h3>கேஷ் பில்</h3>
-          <p ><strong>PHONE:9842263860</strong></p>
-          <p class="text-end">தேதி: ${date}</p>
-          <p>வாடிக்கையாளர்: ${customerName}</p>
-          <p>அலைபேசி எண்: ${mobileNumber}</p>
-          
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>பொருள்</th>
-                <th>அளவு</th>
-                <th>விலை</th>
-                <th>மொத்தம்</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${billItems
-                .filter(item => item.productId && item.quantity)
-                .map((item, index) => `
-                  <tr>
-                    <td>${index + 1}</td>
-                    <td>${item.productName}</td>
-                    <td>${item.quantity}</td>
-                    <td>₹${item.price.toFixed(2)}</td>
-                    <td>₹${calculateTotal(item).toFixed(2)}</td>
-                  </tr>
-                `).join('')}
-              <tr>
-                <td colspan="4" class="text-end"><strong>மொத்த தொகை:</strong></td>
-                <td><strong>₹${grandTotal.toFixed(2)}</strong></td>
-              </tr>
-            </tbody>
-          </table>
-          
-          <p class="text-center mt-4">என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
-        </body>
-      </html>
-    `;
+    // Optimized for 58mm thermal printer
+  const billContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>ராஜா ஸ்னாக்ஸ் பில்</title>
+        <meta charset="UTF-8">
+        <style>
+          ${printStyles}
+          .header {
+            text-align: center;
+            margin-bottom: 1mm;
+          }
+          .shop-name {
+            font-weight: bold;
+            font-size: 11px;
+            margin: 0;
+          }
+          .bill-title {
+            font-weight: bold;
+            font-size: 10px;
+            margin: 1px 0;
+          }
+          .contact {
+            font-size: 8px;
+            margin: 1px 0 2px 0;
+          }
+          .info-row {
+            display: flex;
+            margin: 0.5mm 0;
+          }
+          .info-label {
+            width: 22mm;
+          }
+          .info-value {
+            margin-left: 2mm;
+          }
+          .items-table th, .items-table td {
+            text-align: center;
+            padding: 0.5mm 0;
+          }
+          .items-header {
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+          }
+          .total-divider {
+            border-top: 1px dashed #000;
+            margin: 1mm 0;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 1mm;
+            font-size: 8px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
+          <p class="bill-title">கேஷ் பில்</p>
+          <p class="contact">தொலைபேசி: 9842263860</p>
+        </div>
+        
+        <div class="info-row">
+          <span class="info-label">தேதி:</span>
+          <span class="info-value">${date}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">நேரம்:</span>
+          <span class="info-value">${time}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">வாடிக்கையாளர்:</span>
+          <span class="info-value">${customerName}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">அலைபேசி:</span>
+          <span class="info-value">${mobileNumber}</span>
+        </div>
+        
+        <table class="items-table">
+          <thead>
+            <tr class="items-header">
+              <th width="15%">#</th>
+              <th width="40%">பொருள்</th>
+              <th width="15%">அளவு</th>
+              <th width="15%">விலை</th>
+              <th width="15%">மொத்தம்</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${billItems
+              .filter(item => item.productId && item.quantity)
+              .map((item, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${item.productName}</td>
+                  <td>${item.quantity}</td>
+                  <td>₹${item.price.toFixed(2)}</td>
+                  <td>₹${calculateTotal(item).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+          </tbody>
+        </table>
+        
+        <div class="total-divider"></div>
+        
+        <div class="info-row">
+          <span class="info-label"><strong>மொத்த தொகை:</strong></span>
+          <span class="info-value"><strong>₹${grandTotal.toFixed(2)}</strong></span>
+        </div>
+        
+        <div class="footer">
+          <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
+        </div>
+      </body>
+    </html>
+  `;
 
     printWindow.document.open();
     printWindow.document.write(billContent);
     printWindow.document.close();
 
-    // Wait for content to load before printing
     printWindow.onload = () => {
       setTimeout(() => {
         printWindow.print();
@@ -271,10 +337,46 @@ const Billing = () => {
       }, 200);
     };
   };
-
+  const printStyles = `
+  @page { 
+    size: 58mm 100mm;
+    margin: 0;
+  }
+  @font-face {
+    font-family: 'Noto Sans Tamil';
+    font-style: normal;
+    font-weight: 400;
+    src: url(/fonts/NotoSansTamil-Regular.ttf) format('truetype');
+  }
+  body { 
+    -webkit-print-color-adjust: exact;
+    width: 58mm;
+    margin: 0;
+    padding: 1mm 2mm;
+    font-family: 'Noto Sans Tamil', sans-serif;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+  table { 
+    width: 100%; 
+    border-collapse: collapse; 
+  }
+  th, td { 
+    padding: 1px; 
+  }
+  th { 
+    border-bottom: 1px dashed #000;
+  }
+  td {
+    border-bottom: 1px dashed #ddd;
+  }
+`;
   return (
     <div className="container mt-4">
       <h2 className="mb-4">Billing</h2>
+      
+      {loadingProducts && <div className="alert alert-info">Loading products...</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
       
       {/* Customer Details */}
       <div className="row mb-3 no-print">
@@ -342,7 +444,14 @@ const Billing = () => {
                       setActiveField('quantity');
                     }}
                     ref={el => quantityRefs.current[index] = el}
+                    min="1"
+                    max={products.find(p => p._id === parseInt(item.productId))?.stock || ''}
                   />
+                  {item.productId && (
+                    <small className="text-muted">
+                      Available: {products.find(p => p._id === parseInt(item.productId))?.stock || 0}
+                    </small>
+                  )}
                 </td>
                 <td>₹{item.price.toFixed(2)}</td>
                 <td>₹{calculateTotal(item).toFixed(2)}</td>
@@ -363,6 +472,8 @@ const Billing = () => {
             setBillItems([{ productId: '', quantity: '', productName: '', price: 0 }]);
             setActiveRow(0);
             setActiveField('productId');
+            setCustomerName('');
+            setMobileNumber('');
           }}
           disabled={billItems.length === 1 && !billItems[0].productId && !billItems[0].quantity}
         >

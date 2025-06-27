@@ -23,7 +23,7 @@ const handleSubmit = async (e) => {
       throw new Error('Please enter a valid price');
     }
 
-    const response = await fetch('http://localhost:5000/api/products', {
+    const response = await fetch('https://billing-server-gaha.onrender.com/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
