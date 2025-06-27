@@ -170,66 +170,78 @@ const Billing = () => {
     }, 0);
   };
 
-  const handlePrint = async () => {
-    if (billItems.filter(item => item.productId && item.quantity).length === 0) {
-      alert('Please add items to the bill before printing');
+ const handlePrint = async () => {
+  if (billItems.filter(item => item.productId && item.quantity).length === 0) {
+    alert('Please add items to the bill before printing');
+    return;
+  }
+  if (!customerName || !mobileNumber) {
+    alert('Please enter customer name and mobile number');
+    return;
+  }
+
+  setIsPrinting(true);
+
+  try {
+    // First save the bill (which updates stock)
+    const validItems = billItems
+      .filter(item => item.productId && item.quantity)
+      .map(item => ({
+        productId: parseInt(item.productId),
+        quantity: parseInt(item.quantity),
+        price: parseFloat(item.price)
+      }));
+
+    const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        items: validItems,
+        customerName,
+        mobileNumber
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      if (errorData.availableStock !== undefined) {
+        throw new Error(`${errorData.message}. Please adjust your quantity.`);
+      }
+      throw new Error(errorData.message || 'Failed to create bill');
+    }
+
+    // Refresh products to get updated stock levels
+    const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
+    const updatedProducts = await productsResponse.json();
+    setProducts(updatedProducts);
+
+    // Generate print content
+    const now = new Date();
+    const date = now.toLocaleDateString('ta-IN');
+    const time = now.toLocaleTimeString('ta-IN');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Popup was blocked. Please allow popups for this site.');
+      setIsPrinting(false);
       return;
     }
-    if (!customerName || !mobileNumber) {
-      alert('Please enter customer name and mobile number');
-      return;
-    }
 
-    setIsPrinting(true);
+    // Calculate how many items can fit per page (adjust based on your printer)
+    const itemsPerPage = 8; // Adjust this number based on your thermal printer
+    const validBillItems = billItems.filter(item => item.productId && item.quantity);
+    const totalPages = Math.ceil(validBillItems.length / itemsPerPage);
 
-    try {
-      // First save the bill (which updates stock)
-      const validItems = billItems
-        .filter(item => item.productId && item.quantity)
-        .map(item => ({
-          productId: parseInt(item.productId),
-          quantity: parseInt(item.quantity),
-          price: parseFloat(item.price)
-        }));
-
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          items: validItems,
-          customerName,
-          mobileNumber
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (errorData.availableStock !== undefined) {
-          throw new Error(`${errorData.message}. Please adjust your quantity.`);
-        }
-        throw new Error(errorData.message || 'Failed to create bill');
-      }
-
-      // Refresh products to get updated stock levels
-      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
-      const updatedProducts = await productsResponse.json();
-      setProducts(updatedProducts);
-
-      // Generate print content
-      const now = new Date();
-      const date = now.toLocaleDateString('ta-IN');
-      const time = now.toLocaleTimeString('ta-IN');
-
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('Popup was blocked. Please allow popups for this site.');
-        setIsPrinting(false);
-        return;
-      }
-
-      const billContent = `
+    let billContent = '';
+    
+    for (let page = 0; page < totalPages; page++) {
+      const startIdx = page * itemsPerPage;
+      const endIdx = startIdx + itemsPerPage;
+      const pageItems = validBillItems.slice(startIdx, endIdx);
+      
+      billContent += `
         <!DOCTYPE html>
         <html>
           <head>
@@ -237,57 +249,66 @@ const Billing = () => {
             <meta charset="UTF-8">
             <style>
               @page { 
-                size: 58mm 100mm;
+                size: 80mm auto; /* Adjusted for better thermal paper usage */
                 margin: 0;
               }
               body { 
-                -webkit-print-color-adjust: exact;
-                width: 58mm;
+                width: 80mm;
                 margin: 0;
-                padding: 1mm 2mm;
+                padding: 2mm;
                 font-family: Arial, sans-serif;
-                font-size: 9px;
+                font-size: 10px;
                 line-height: 1.2;
               }
               .header {
                 text-align: center;
-                margin-bottom: 1mm;
+                margin-bottom: 2mm;
               }
               .shop-name {
                 font-weight: bold;
-                font-size: 11px;
+                font-size: 12px;
                 margin: 0;
               }
               .bill-title {
                 font-weight: bold;
-                font-size: 10px;
+                font-size: 11px;
                 margin: 1px 0;
               }
               .contact {
-                font-size: 8px;
+                font-size: 9px;
                 margin: 1px 0 2px 0;
               }
-              table { 
-                width: 100%; 
-                border-collapse: collapse; 
+              .customer-info {
+                margin-bottom: 2mm;
               }
-              th, td { 
-                padding: 1px; 
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 2mm;
               }
-              th { 
+              th, td {
+                padding: 1mm 0;
+                text-align: left;
+              }
+              th {
                 border-bottom: 1px dashed #000;
               }
-              td {
+              .item-row td {
                 border-bottom: 1px dashed #ddd;
+                padding: 1mm 0;
               }
-              .total-divider {
+              .total-row {
+                font-weight: bold;
                 border-top: 1px dashed #000;
-                margin: 1mm 0;
+                border-bottom: 1px dashed #000;
               }
               .footer {
                 text-align: center;
-                margin-top: 1mm;
-                font-size: 8px;
+                margin-top: 2mm;
+                font-size: 9px;
+              }
+              .page-break {
+                page-break-after: always;
               }
             </style>
           </head>
@@ -298,65 +319,73 @@ const Billing = () => {
               <p class="contact">தொலைபேசி: 9842263860</p>
             </div>
             
-            <div>தேதி: ${date}</div>
-            <div>நேரம்: ${time}</div>
-            <div>வாடிக்கையாளர்: ${customerName}</div>
-            <div>அலைபேசி: ${mobileNumber}</div>
+            <div class="customer-info">
+              <div>தேதி: ${date}</div>
+              <div>நேரம்: ${time}</div>
+              <div>வாடிக்கையாளர்: ${customerName}</div>
+              <div>அலைபேசி: ${mobileNumber}</div>
+            </div>
             
             <table>
               <thead>
                 <tr>
-                  <th width="15%">#</th>
+                  <th width="10%">#</th>
                   <th width="40%">பொருள்</th>
                   <th width="15%">அளவு</th>
                   <th width="15%">விலை</th>
-                  <th width="15%">மொத்தம்</th>
+                  <th width="20%">மொத்தம்</th>
                 </tr>
               </thead>
               <tbody>
-                ${billItems
-                  .filter(item => item.productId && item.quantity)
-                  .map((item, index) => `
-                    <tr>
-                      <td>${index + 1}</td>
-                      <td>${item.productName}</td>
-                      <td>${item.quantity}</td>
-                      <td>₹${item.price.toFixed(2)}</td>
-                      <td>₹${calculateTotal(item).toFixed(2)}</td>
-                    </tr>
-                  `).join('')}
+                ${pageItems.map((item, idx) => `
+                  <tr class="item-row">
+                    <td>${startIdx + idx + 1}</td>
+                    <td>${item.productName}</td>
+                    <td>${item.quantity}</td>
+                    <td>₹${item.price.toFixed(2)}</td>
+                    <td>₹${calculateTotal(item).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
               </tbody>
             </table>
             
-            <div class="total-divider"></div>
+            ${page === totalPages - 1 ? `
+              <table>
+                <tr class="total-row">
+                  <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
+                  <td>₹${grandTotal.toFixed(2)}</td>
+                </tr>
+              </table>
+              
+              <div class="footer">
+                <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
+              </div>
+            ` : ''}
             
-            <div><strong>மொத்த தொகை: ₹${grandTotal.toFixed(2)}</strong></div>
-            
-            <div class="footer">
-              <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
-            </div>
+            ${page < totalPages - 1 ? '<div class="page-break"></div>' : ''}
           </body>
         </html>
       `;
-
-      printWindow.document.open();
-      printWindow.document.write(billContent);
-      printWindow.document.close();
-
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-          setIsPrinting(false);
-          resetForm(); // Reset the form after printing
-        }, 200);
-      };
-    } catch (err) {
-      console.error('Error creating bill:', err);
-      alert(err.message);
-      setIsPrinting(false);
     }
-  };
+
+    printWindow.document.open();
+    printWindow.document.write(billContent);
+    printWindow.document.close();
+
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+        setIsPrinting(false);
+        resetForm(); // Reset the form after printing
+      }, 200);
+    };
+  } catch (err) {
+    console.error('Error creating bill:', err);
+    alert(err.message);
+    setIsPrinting(false);
+  }
+};
 
   return (
     <div className="container mt-4">
