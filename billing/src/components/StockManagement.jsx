@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const StockManagement = () => {
   const [products, setProducts] = useState([]);
-  const [stockEntry, setStockEntry] = useState({
-    productId: '',
-    quantity: ''
-  });
+  const [stockEntries, setStockEntries] = useState([{ 
+    productId: '', 
+    productName: '', 
+    currentStock: 0,
+    newQuantity: '' 
+  }]);
   const [productEdit, setProductEdit] = useState({
     id: '',
     name: '',
@@ -13,40 +15,124 @@ const StockManagement = () => {
     price: '',
     minStockLevel: ''
   });
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeRow, setActiveRow] = useState(0);
+  const [activeField, setActiveField] = useState('productId');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  const productIdRefs = useRef([]);
+  const quantityRefs = useRef([]);
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    // Focus the active field whenever it changes
+    if (activeField === 'productId' && productIdRefs.current[activeRow]) {
+      productIdRefs.current[activeRow].focus();
+    } else if (activeField === 'quantity' && quantityRefs.current[activeRow]) {
+      quantityRefs.current[activeRow].focus();
+    }
+  }, [activeRow, activeField]);
+
   const fetchProducts = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const response = await fetch('https://billing-server-gaha.onrender.com/api/products');
-      if (!response.ok) throw new Error('Network response was not ok');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       setProducts(data.sort((a, b) => a._id - b._id));
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to load products');
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Failed to load products. Please try again later.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleStockSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const productId = Number(stockEntry.productId);
-      const quantity = Number(stockEntry.quantity);
-
-      if (isNaN(productId)) {
-        throw new Error('Please select a valid product');
+  const handleStockInputChange = (index, field, value) => {
+    const updatedEntries = [...stockEntries];
+    
+    if (field === 'productId') {
+      const productId = parseInt(value);
+      if (!isNaN(productId)) {
+        const product = products.find(p => p._id === productId);
+        if (product) {
+          updatedEntries[index].productName = product.nameTamil;
+          updatedEntries[index].currentStock = product.stock;
+        } else {
+          updatedEntries[index].productName = '';
+          updatedEntries[index].currentStock = 0;
+        }
       }
+      updatedEntries[index][field] = value;
+    } else {
+      updatedEntries[index][field] = value;
+    }
+    
+    setStockEntries(updatedEntries);
+  };
 
+  const handleStockKeyDown = (e, index, field) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      if (field === 'productId') {
+        if (stockEntries[index].productId && stockEntries[index].productName) {
+          setActiveField('quantity');
+        }
+      } else if (field === 'quantity') {
+        if (index === stockEntries.length - 1) {
+          setStockEntries([...stockEntries, { 
+            productId: '', 
+            productName: '', 
+            currentStock: 0,
+            newQuantity: '' 
+          }]);
+        }
+        setActiveRow(index + 1);
+        setActiveField('productId');
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (field === 'productId') {
+        setActiveField('quantity');
+      } else if (field === 'quantity') {
+        if (index === stockEntries.length - 1) {
+          setStockEntries([...stockEntries, { 
+            productId: '', 
+            productName: '', 
+            currentStock: 0,
+            newQuantity: '' 
+          }]);
+        }
+        setActiveRow(index + 1);
+        setActiveField('productId');
+      }
+    }
+  };
+
+  const handleUpdateStock = async (index) => {
+    const entry = stockEntries[index];
+    if (!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)) {
+      alert('Please enter valid product ID and quantity');
+      return;
+    }
+
+    try {
       const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productId: productId,
-          quantity: quantity
+          productId: parseInt(entry.productId),
+          quantity: parseInt(entry.newQuantity)
         })
       });
 
@@ -55,9 +141,17 @@ const StockManagement = () => {
         throw new Error(errorData.message || 'Stock update failed');
       }
 
-      fetchProducts();
-      setStockEntry({ productId: '', quantity: '' });
-      alert('Stock quantity updated successfully!');
+      // Refresh products to get updated stock levels
+      await fetchProducts();
+      
+      // Update the current stock display
+      const updatedEntries = [...stockEntries];
+      updatedEntries[index].currentStock = parseInt(entry.newQuantity);
+      updatedEntries[index].newQuantity = '';
+      setStockEntries(updatedEntries);
+
+      setSuccessMessage(`Stock updated successfully for ${entry.productName}`);
+      setTimeout(() => setSuccessMessage(''), 3000);
       
     } catch (err) {
       console.error('Error:', err);
@@ -65,6 +159,64 @@ const StockManagement = () => {
     }
   };
 
+  const handleBulkUpdate = async () => {
+    const validEntries = stockEntries
+      .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
+      .map(entry => ({
+        productId: parseInt(entry.productId),
+        quantity: parseInt(entry.newQuantity)
+      }));
+
+    if (validEntries.length === 0) {
+      alert('No valid entries to update');
+      return;
+    }
+
+    try {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: validEntries })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Bulk stock update failed');
+      }
+
+      // Refresh products to get updated stock levels
+      await fetchProducts();
+      
+      // Reset new quantities
+      const updatedEntries = stockEntries.map(entry => {
+        if (entry.productId && entry.newQuantity && !isNaN(entry.newQuantity)) {
+          return { ...entry, currentStock: parseInt(entry.newQuantity), newQuantity: '' };
+        }
+        return entry;
+      });
+      setStockEntries(updatedEntries);
+
+      setSuccessMessage(`Successfully updated ${validEntries.length} products`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+    } catch (err) {
+      console.error('Error:', err);
+      alert(err.message);
+    }
+  };
+
+  const resetStockForm = () => {
+    setStockEntries([{ 
+      productId: '', 
+      productName: '', 
+      currentStock: 0,
+      newQuantity: '' 
+    }]);
+    setActiveRow(0);
+    setActiveField('productId');
+  };
+
+  // Existing product edit functions
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -92,7 +244,8 @@ const StockManagement = () => {
         price: '',
         minStockLevel: ''
       });
-      alert('Product details updated successfully!');
+      setSuccessMessage('Product details updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
       
     } catch (err) {
       console.error('Error:', err);
@@ -114,48 +267,108 @@ const StockManagement = () => {
     <div className="container mt-4">
       <h2>Stock Management</h2>
       
-      {/* Stock Quantity Update Section */}
+      {loading && <div className="alert alert-info">Loading products...</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
+      {successMessage && <div className="alert alert-success">{successMessage}</div>}
+      
+      {/* Stock Quantity Update Section - Now in Table Format */}
       <div className="card mb-4">
         <div className="card-header bg-primary text-white">Update Stock Quantity</div>
         <div className="card-body">
-          <form onSubmit={handleStockSubmit}>
-            <div className="row mb-3">
-              <div className="col-md-6">
-                <label className="form-label">Select Product</label>
-                <select
-                  className="form-control"
-                  value={stockEntry.productId}
-                  onChange={(e) => setStockEntry({...stockEntry, productId: e.target.value})}
-                  required
-                >
-                  <option value="">Select a product</option>
-                  {products.map(product => (
-                    <option key={product._id} value={product._id}>
-                      {product._id} - {product.nameTamil} (Current: {product.stock})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label">Quantity to Add</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={stockEntry.quantity}
-                  onChange={(e) => setStockEntry({...stockEntry, quantity: e.target.value})}
-                  min="1"
-                  required
-                />
-              </div>
-            </div>
-            <button type="submit" className="btn btn-primary">
-              Update Stock Quantity
+          <div className="table-responsive">
+            <table className="table table-bordered">
+              <thead>
+                <tr>
+                  <th width="5%">#</th>
+                  <th width="15%">Product ID</th>
+                  <th width="30%">Product Name</th>
+                  <th width="15%">Current Stock</th>
+                  <th width="15%">New Quantity</th>
+                  <th width="20%">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stockEntries.map((entry, index) => (
+                  <tr key={index} className={activeRow === index ? 'table-active' : ''}>
+                    <td>{index + 1}</td>
+                    <td>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        value={entry.productId}
+                        onChange={(e) => handleStockInputChange(index, 'productId', e.target.value)}
+                        onKeyDown={(e) => handleStockKeyDown(e, index, 'productId')}
+                        onFocus={() => {
+                          setActiveRow(index);
+                          setActiveField('productId');
+                        }}
+                        ref={el => productIdRefs.current[index] = el}
+                      />
+                    </td>
+                    <td>{entry.productName}</td>
+                    <td>{entry.currentStock}</td>
+                    <td>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        value={entry.newQuantity}
+                        onChange={(e) => handleStockInputChange(index, 'newQuantity', e.target.value)}
+                        onKeyDown={(e) => handleStockKeyDown(e, index, 'quantity')}
+                        onFocus={() => {
+                          setActiveRow(index);
+                          setActiveField('quantity');
+                        }}
+                        ref={el => quantityRefs.current[index] = el}
+                        min="0"
+                      />
+                    </td>
+                    <td>
+                      <button 
+                        className="btn btn-sm btn-primary"
+                        onClick={() => handleUpdateStock(index)}
+                        disabled={!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)}
+                      >
+                        Update
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="d-flex justify-content-between mt-3">
+            <button 
+              className="btn btn-danger" 
+              onClick={resetStockForm}
+              disabled={stockEntries.length === 1 && !stockEntries[0].productId && !stockEntries[0].newQuantity}
+            >
+              Clear
             </button>
-          </form>
+            <div>
+              <button 
+                className="btn btn-secondary me-2"
+                onClick={() => setStockEntries([...stockEntries, { 
+                  productId: '', 
+                  productName: '', 
+                  currentStock: 0,
+                  newQuantity: '' 
+                }])}
+              >
+                Add Row
+              </button>
+              <button 
+                className="btn btn-success" 
+                onClick={handleBulkUpdate}
+                disabled={!stockEntries.some(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))}
+              >
+                Bulk Update
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Product Details Update Section */}
+      {/* Product Details Update Section (unchanged) */}
       <div className="card mb-4">
         <div className="card-header bg-success text-white">Update Product Details</div>
         <div className="card-body">
@@ -240,7 +453,7 @@ const StockManagement = () => {
         </div>
       </div>
 
-      {/* Products List Table */}
+      {/* Products List Table (unchanged) */}
       <div className="card">
         <div className="card-header">Product List</div>
         <div className="card-body">
