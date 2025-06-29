@@ -29,7 +29,6 @@ const StockManagement = () => {
   }, []);
 
   useEffect(() => {
-    // Focus the active field whenever it changes
     if (activeField === 'productId' && productIdRefs.current[activeRow]) {
       productIdRefs.current[activeRow].focus();
     } else if (activeField === 'quantity' && quantityRefs.current[activeRow]) {
@@ -44,14 +43,18 @@ const StockManagement = () => {
       const response = await fetch('https://billing-server-gaha.onrender.com/api/products');
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to fetch products. Status: ${response.status}`);
       }
       
       const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid data format received from server');
+      }
+      
       setProducts(data.sort((a, b) => a._id - b._id));
     } catch (err) {
-      console.error('Error fetching products:', err);
-      setError('Failed to load products. Please try again later.');
+      console.error('Fetch products error:', err);
+      setError(err.message || 'Failed to load products. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -64,13 +67,8 @@ const StockManagement = () => {
       const productId = parseInt(value);
       if (!isNaN(productId)) {
         const product = products.find(p => p._id === productId);
-        if (product) {
-          updatedEntries[index].productName = product.nameTamil;
-          updatedEntries[index].currentStock = product.stock;
-        } else {
-          updatedEntries[index].productName = '';
-          updatedEntries[index].currentStock = 0;
-        }
+        updatedEntries[index].productName = product ? product.nameTamil : '';
+        updatedEntries[index].currentStock = product ? product.stock : 0;
       }
       updatedEntries[index][field] = value;
     } else {
@@ -83,7 +81,6 @@ const StockManagement = () => {
   const handleStockKeyDown = (e, index, field) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      
       if (field === 'productId') {
         if (stockEntries[index].productId && stockEntries[index].productName) {
           setActiveField('quantity');
@@ -137,14 +134,12 @@ const StockManagement = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Stock update failed');
+        const errorText = await response.text();
+        throw new Error(errorText || `Stock update failed. Status: ${response.status}`);
       }
 
-      // Refresh products to get updated stock levels
       await fetchProducts();
       
-      // Update the current stock display
       const updatedEntries = [...stockEntries];
       updatedEntries[index].currentStock = parseInt(entry.newQuantity);
       updatedEntries[index].newQuantity = '';
@@ -154,8 +149,9 @@ const StockManagement = () => {
       setTimeout(() => setSuccessMessage(''), 3000);
       
     } catch (err) {
-      console.error('Error:', err);
-      alert(err.message);
+      console.error('Update stock error:', err);
+      setError(err.message || 'Failed to update stock. Please check the endpoint.');
+      setTimeout(() => setError(null), 5000);
     }
   };
 
@@ -180,14 +176,12 @@ const StockManagement = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Bulk stock update failed');
+        const errorText = await response.text();
+        throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
       }
 
-      // Refresh products to get updated stock levels
       await fetchProducts();
       
-      // Reset new quantities
       const updatedEntries = stockEntries.map(entry => {
         if (entry.productId && entry.newQuantity && !isNaN(entry.newQuantity)) {
           return { ...entry, currentStock: parseInt(entry.newQuantity), newQuantity: '' };
@@ -200,8 +194,9 @@ const StockManagement = () => {
       setTimeout(() => setSuccessMessage(''), 3000);
       
     } catch (err) {
-      console.error('Error:', err);
-      alert(err.message);
+      console.error('Bulk update error:', err);
+      setError(err.message || 'Failed to perform bulk update. Please check the endpoint.');
+      setTimeout(() => setError(null), 5000);
     }
   };
 
@@ -216,7 +211,6 @@ const StockManagement = () => {
     setActiveField('productId');
   };
 
-  // Existing product edit functions
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -232,11 +226,11 @@ const StockManagement = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Product update failed');
+        const errorText = await response.text();
+        throw new Error(errorText || `Product update failed. Status: ${response.status}`);
       }
 
-      fetchProducts();
+      await fetchProducts();
       setProductEdit({
         id: '',
         name: '',
@@ -248,8 +242,9 @@ const StockManagement = () => {
       setTimeout(() => setSuccessMessage(''), 3000);
       
     } catch (err) {
-      console.error('Error:', err);
-      alert(err.message);
+      console.error('Edit product error:', err);
+      setError(err.message || 'Failed to update product. Please check the endpoint.');
+      setTimeout(() => setError(null), 5000);
     }
   };
 
@@ -271,7 +266,6 @@ const StockManagement = () => {
       {error && <div className="alert alert-danger">{error}</div>}
       {successMessage && <div className="alert alert-success">{successMessage}</div>}
       
-      {/* Stock Quantity Update Section - Now in Table Format */}
       <div className="card mb-4">
         <div className="card-header bg-primary text-white">Update Stock Quantity</div>
         <div className="card-body">
@@ -368,7 +362,6 @@ const StockManagement = () => {
         </div>
       </div>
 
-      {/* Product Details Update Section (unchanged) */}
       <div className="card mb-4">
         <div className="card-header bg-success text-white">Update Product Details</div>
         <div className="card-body">
@@ -453,7 +446,6 @@ const StockManagement = () => {
         </div>
       </div>
 
-      {/* Products List Table (unchanged) */}
       <div className="card">
         <div className="card-header">Product List</div>
         <div className="card-body">
