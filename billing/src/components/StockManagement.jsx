@@ -155,50 +155,52 @@ const StockManagement = () => {
     }
   };
 
-  const handleBulkUpdate = async () => {
-    const validEntries = stockEntries
-      .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
-      .map(entry => ({
-        productId: parseInt(entry.productId),
-        quantity: parseInt(entry.newQuantity)
-      }));
+const handleBulkUpdate = async () => {
+  const validEntries = stockEntries
+    .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
+    .map(entry => ({
+      productId: parseInt(entry.productId),
+      quantity: parseInt(entry.newQuantity)
+    }));
 
-    if (validEntries.length === 0) {
-      alert('No valid entries to update');
-      return;
+  if (validEntries.length === 0) {
+    alert('No valid entries to update');
+    return;
+  }
+
+  try {
+    const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates: validEntries })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
     }
 
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates: validEntries })
-      });
+    await fetchProducts();
+    
+    // Clear the stock entries table after successful update
+    setStockEntries([{ 
+      productId: '', 
+      productName: '', 
+      currentStock: 0,
+      newQuantity: '' 
+    }]);
+    setActiveRow(0);
+    setActiveField('productId');
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
-      }
-
-      await fetchProducts();
-      
-      const updatedEntries = stockEntries.map(entry => {
-        if (entry.productId && entry.newQuantity && !isNaN(entry.newQuantity)) {
-          return { ...entry, currentStock: parseInt(entry.newQuantity), newQuantity: '' };
-        }
-        return entry;
-      });
-      setStockEntries(updatedEntries);
-
-      setSuccessMessage(`Successfully updated ${validEntries.length} products`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-      
-    } catch (err) {
-      console.error('Bulk update error:', err);
-      setError(err.message || 'Failed to perform bulk update. Please check the endpoint.');
-      setTimeout(() => setError(null), 5000);
-    }
-  };
+    setSuccessMessage(`Successfully updated ${validEntries.length} products`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+    
+  } catch (err) {
+    console.error('Bulk update error:', err);
+    setError(err.message || 'Failed to perform bulk update. Please check the endpoint.');
+    setTimeout(() => setError(null), 5000);
+  }
+};
 
   const resetStockForm = () => {
     setStockEntries([{ 
