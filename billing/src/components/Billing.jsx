@@ -6,10 +6,11 @@ const Billing = () => {
     productId: '', 
     quantity: '', 
     productName: '', 
+    productNameTamil: '',
     price: 0
   }]);
   const [activeRow, setActiveRow] = useState(0);
-  const [activeField, setActiveField] = useState('productId');
+  const [activeField, setActiveField] = useState('productSearch');
   const [customerName, setCustomerName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
@@ -18,12 +19,16 @@ const Billing = () => {
   const [savedContacts, setSavedContacts] = useState([]);
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
-  
-  const productIdRefs = useRef([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [filteredProducts, setFilteredProducts] = useState([]);
+
+  const productSearchRefs = useRef([]);
   const quantityRefs = useRef([]);
   const customerNameRef = useRef(null);
   const mobileNumberRef = useRef(null);
   const dropdownRef = useRef(null);
+  const productDropdownRef = useRef(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -38,6 +43,7 @@ const Billing = () => {
         
         const data = await response.json();
         setProducts(data);
+        setFilteredProducts(data);
       } catch (err) {
         console.error('Error fetching products:', err);
         setError('Failed to load products. Please try again later.');
@@ -49,6 +55,20 @@ const Billing = () => {
     fetchProducts();
     loadSavedContacts();
   }, []);
+
+  useEffect(() => {
+    if (productSearch) {
+      const filtered = products.filter(product => 
+        product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+        product.nameTamil.toLowerCase().includes(productSearch.toLowerCase())
+      );
+      setFilteredProducts(filtered);
+      setShowProductDropdown(true);
+    } else {
+      setFilteredProducts(products);
+      setShowProductDropdown(false);
+    }
+  }, [productSearch, products]);
 
   const loadSavedContacts = async () => {
     try {
@@ -68,8 +88,27 @@ const Billing = () => {
     setShowContactDropdown(false);
     setContactSearch('');
     setTimeout(() => {
-      if (productIdRefs.current[0]) {
-        productIdRefs.current[0].focus();
+      if (productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
+      }
+    }, 0);
+  };
+
+  const selectProduct = (product, index) => {
+    const updatedItems = [...billItems];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      productId: product._id,
+      productName: product.name,
+      productNameTamil: product.nameTamil,
+      price: product.price
+    };
+    setBillItems(updatedItems);
+    setProductSearch('');
+    setShowProductDropdown(false);
+    setTimeout(() => {
+      if (quantityRefs.current[index]) {
+        quantityRefs.current[index].focus();
       }
     }, 0);
   };
@@ -124,8 +163,8 @@ const Billing = () => {
   );
 
   useEffect(() => {
-    if (activeField === 'productId' && productIdRefs.current[activeRow]) {
-      productIdRefs.current[activeRow].focus();
+    if (activeField === 'productSearch' && productSearchRefs.current[activeRow]) {
+      productSearchRefs.current[activeRow].focus();
     } else if (activeField === 'quantity' && quantityRefs.current[activeRow]) {
       quantityRefs.current[activeRow].focus();
     }
@@ -133,37 +172,52 @@ const Billing = () => {
 
   const handleInputChange = (index, field, value) => {
     const updatedItems = [...billItems];
-    
-    if (field === 'productId') {
-      const productId = parseInt(value);
-      if (!isNaN(productId)) {
-        const product = products.find(p => p._id === productId);
-        if (product) {
-          updatedItems[index].productName = product.nameTamil;
-          updatedItems[index].price = product.price;
-        } else {
-          updatedItems[index].productName = '';
-          updatedItems[index].price = 0;
-        }
-      }
-      updatedItems[index][field] = value;
-    } else {
-      updatedItems[index][field] = value;
-    }
-    
+    updatedItems[index][field] = value;
     setBillItems(updatedItems);
+  };
+
+  const handleProductKeyDown = (e, index) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredProducts.length === 1) {
+        selectProduct(filteredProducts[0], index);
+      }
+    } else if (e.key === 'ArrowDown' && showProductDropdown) {
+      e.preventDefault();
+      const firstItem = document.querySelector(`.product-item-${index}`);
+      if (firstItem) firstItem.focus();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      setActiveField('quantity');
+    }
+  };
+
+  const handleProductItemKeyDown = (e, product, index) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      selectProduct(product, index);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextItem = e.currentTarget.nextElementSibling;
+      if (nextItem) nextItem.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevItem = e.currentTarget.previousElementSibling;
+      if (prevItem) prevItem.focus();
+      else productSearchRefs.current[index].focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      productSearchRefs.current[index].focus();
+      setShowProductDropdown(false);
+    }
   };
 
   const handleKeyDown = (e, index, field) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       
-      if (field === 'productId') {
-        if (billItems[index].productId && billItems[index].productName) {
-          setActiveField('quantity');
-        }
-      } else if (field === 'quantity') {
-        const product = products.find(p => p._id === parseInt(billItems[index].productId));
+      if (field === 'quantity') {
+        const product = products.find(p => p._id === billItems[index].productId);
         if (product && parseInt(billItems[index].quantity) > product.stock) {
           alert(`Only ${product.stock} items available for ${product.nameTamil}`);
           return;
@@ -174,15 +228,16 @@ const Billing = () => {
             productId: '', 
             quantity: '', 
             productName: '', 
+            productNameTamil: '',
             price: 0
           }]);
         }
         setActiveRow(index + 1);
-        setActiveField('productId');
+        setActiveField('productSearch');
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      if (field === 'productId') {
+      if (field === 'productSearch') {
         setActiveField('quantity');
       } else if (field === 'quantity') {
         if (index === billItems.length - 1) {
@@ -190,11 +245,12 @@ const Billing = () => {
             productId: '', 
             quantity: '', 
             productName: '', 
+            productNameTamil: '',
             price: 0
           }]);
         }
         setActiveRow(index + 1);
-        setActiveField('productId');
+        setActiveField('productSearch');
       }
     }
   };
@@ -215,8 +271,8 @@ const Billing = () => {
   const handleMobileNumberKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (productIdRefs.current[0]) {
-        productIdRefs.current[0].focus();
+      if (productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
       }
     }
   };
@@ -233,10 +289,11 @@ const Billing = () => {
       productId: '', 
       quantity: '', 
       productName: '', 
+      productNameTamil: '',
       price: 0
     }]);
     setActiveRow(0);
-    setActiveField('productId');
+    setActiveField('productSearch');
     setCustomerName('');
     setMobileNumber('');
     setTimeout(() => {
@@ -267,7 +324,7 @@ const Billing = () => {
       const validItems = billItems
         .filter(item => item.productId && item.quantity)
         .map(item => ({
-          productId: parseInt(item.productId),
+          productId: item.productId,
           quantity: parseInt(item.quantity),
           price: parseFloat(item.price)
         }));
@@ -308,102 +365,135 @@ const Billing = () => {
         return;
       }
 
-      const itemsPerPage = 8;
       const validBillItems = billItems.filter(item => item.productId && item.quantity);
-      const totalPages = Math.ceil(validBillItems.length / itemsPerPage);
 
-      let billContent = '';
-      
-      for (let page = 0; page < totalPages; page++) {
-        const startIdx = page * itemsPerPage;
-        const endIdx = startIdx + itemsPerPage;
-        const pageItems = validBillItems.slice(startIdx, endIdx);
-        
-        billContent += `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>ராஜா ஸ்னாக்ஸ் பில்</title>
-              <meta charset="UTF-8">
-              <style>
-                @page { size: 80mm auto; margin: 0; }
-                body { 
-                  width: 80mm;
-                  margin: 0;
-                  padding: 2mm;
-                  font-family: Arial, sans-serif;
-                  font-size: 10px;
-                  line-height: 1.2;
-                }
-                .header { text-align: center; margin-bottom: 2mm; }
-                .shop-name { font-weight: bold; font-size: 12px; margin: 0; }
-                .bill-title { font-weight: bold; font-size: 11px; margin: 1px 0; }
-                .contact { font-size: 9px; margin: 1px 0 2px 0; }
-                .customer-info { margin-bottom: 2mm; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
-                th, td { padding: 1mm 0; text-align: left; }
-                th { border-bottom: 1px dashed #000; }
-                .item-row td { border-bottom: 1px dashed #ddd; padding: 1mm 0; }
-                .total-row { font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
-                .footer { text-align: center; margin-top: 2mm; font-size: 9px; }
-                .page-break { page-break-after: always; }
-              </style>
-            </head>
-            <body>
-              <div class="header">
-                <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
-                <p class="bill-title">கேஷ் பில்</p>
-                <p class="contact">தொலைபேசி: 9842263860</p>
-              </div>
-              
-              <div class="customer-info">
-                <div>தேதி: ${date}</div>
-                <div>நேரம்: ${time}</div>
+      const billContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>ராஜா ஸ்னாக்ஸ் பில்</title>
+            <meta charset="UTF-8">
+            <style>
+              @page { size: 80mm auto; margin: 0; }
+              body { 
+                width: 80mm;
+                margin: 0;
+                padding: 2mm;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.2;
+              }
+              .header { 
+                text-align: center; 
+                margin-bottom: 2mm; 
+              }
+              .shop-name { 
+                font-weight: bold; 
+                font-size: 16px; 
+                margin: 0; 
+              }
+              .bill-title { 
+                font-weight: bold; 
+                font-size: 15px; 
+                margin: 1px 0; 
+              }
+              .contact { 
+                font-size: 12px; 
+                margin: 1px 0 2px 0; 
+              }
+              .customer-info { 
+                margin-bottom: 2mm;
+                display: flex;
+                justify-content: space-between;
+              }
+              .customer-details {
+                text-align: left;
+              }
+              .date-time {
+                text-align: right;
+              }
+              table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 2mm; 
+              }
+              th, td { 
+                padding: 2mm 0; 
+                text-align: left; 
+              }
+              th { 
+                border-bottom: 1px dashed #000; 
+              }
+              .item-row td { 
+                border-bottom: 1px dashed #ddd; 
+                padding: 2mm 0; 
+              }
+              .total-row { 
+                font-weight: bold; 
+                border-top: 1px dashed #000; 
+                border-bottom: 1px dashed #000; 
+              }
+              .footer { 
+                text-align: center; 
+                margin-top: 2mm; 
+                font-size: 12px; 
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
+              <p class="bill-title">கேஷ் பில்</p>
+              <p class="contact">தொலைபேசி: 9842263860</p>
+            </div>
+            
+            <div class="customer-info">
+              <div class="customer-details">
                 <div>வாடிக்கையாளர்: ${customerName}</div>
                 <div>அலைபேசி: ${mobileNumber}</div>
               </div>
-              
-              <table>
-                <thead>
-                  <tr>
-                    <th width="10%">#</th>
-                    <th width="40%">பொருள்</th>
-                    <th width="15%">அளவு</th>
-                    <th width="15%">விலை</th>
-                    <th width="20%">மொத்தம்</th>
+              <div class="date-time">
+                <div>தேதி: ${date}</div>
+                <div>நேரம்: ${time}</div>
+              </div>
+            </div>
+            
+            <table>
+              <thead>
+                <tr>
+                  <th width="10%">#</th>
+                  <th width="40%">பொருள்</th>
+                  <th width="15%">அளவு</th>
+                  <th width="15%">விலை</th>
+                  <th width="20%">மொத்தம்</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${validBillItems.map((item, idx) => `
+                  <tr class="item-row">
+                    <td>${idx + 1}</td>
+                    <td>${item.productNameTamil}</td>
+                    <td>${item.quantity}</td>
+                    <td>₹${item.price.toFixed(2)}</td>
+                    <td>₹${calculateTotal(item).toFixed(2)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  ${pageItems.map((item, idx) => `
-                    <tr class="item-row">
-                      <td>${startIdx + idx + 1}</td>
-                      <td>${item.productName}</td>
-                      <td>${item.quantity}</td>
-                      <td>₹${item.price.toFixed(2)}</td>
-                      <td>₹${calculateTotal(item).toFixed(2)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-              
-              ${page === totalPages - 1 ? `
-                <table>
-                  <tr class="total-row">
-                    <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-                    <td>₹${grandTotal.toFixed(2)}</td>
-                  </tr>
-                </table>
-                
-                <div class="footer">
-                  <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
-                </div>
-              ` : ''}
-              
-              ${page < totalPages - 1 ? '<div class="page-break"></div>' : ''}
-            </body>
-          </html>
-        `;
-      }
+                `).join('')}
+              </tbody>
+            </table>
+            
+            <table>
+              <tr class="total-row">
+                <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
+                <td>₹${grandTotal.toFixed(2)}</td>
+              </tr>
+            </table>
+            
+            <div class="footer">
+              <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
+            </div>
+          </body>
+        </html>
+      `;
 
       printWindow.document.open();
       printWindow.document.write(billContent);
@@ -537,11 +627,12 @@ const Billing = () => {
           <thead>
             <tr>
               <th width="5%">#</th>
-              <th width="20%">Product ID</th>
-              <th width="25%">Product Name (Tamil)</th>
-              <th width="15%">Quantity</th>
-              <th width="15%">Price</th>
-              <th width="15%">Total</th>
+              <th width="20%">Product (English)</th>
+              <th width="20%">Product (Tamil)</th>
+              <th width="10%">Quantity</th>
+              <th width="10%">Price</th>
+              <th width="10%">Total</th>
+              <th width="15%">Available</th>
             </tr>
           </thead>
           <tbody>
@@ -549,20 +640,65 @@ const Billing = () => {
               <tr key={index} className={activeRow === index ? 'table-active' : ''}>
                 <td>{index + 1}</td>
                 <td>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={item.productId}
-                    onChange={(e) => handleInputChange(index, 'productId', e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e, index, 'productId')}
-                    onFocus={() => {
-                      setActiveRow(index);
-                      setActiveField('productId');
-                    }}
-                    ref={el => productIdRefs.current[index] = el}
-                  />
+                  <div className="position-relative">
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={item.productId ? item.productName : productSearch}
+                      onChange={(e) => {
+                        setProductSearch(e.target.value);
+                        handleInputChange(index, 'productSearch', e.target.value);
+                      }}
+                      onKeyDown={(e) => handleProductKeyDown(e, index)}
+                      onFocus={() => {
+                        setActiveRow(index);
+                        setActiveField('productSearch');
+                        if (!item.productId) {
+                          setShowProductDropdown(true);
+                        }
+                      }}
+                      ref={el => productSearchRefs.current[index] = el}
+                      placeholder="Search product..."
+                    />
+                    {showProductDropdown && activeRow === index && (
+                      <div 
+                        className="card position-absolute w-100" 
+                        style={{ zIndex: 1000 }}
+                        ref={productDropdownRef}
+                      >
+                        <div className="card-body p-2">
+                          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                            {filteredProducts.length > 0 ? (
+                              <ul className="list-group list-group-flush">
+                                {filteredProducts.map((product, idx) => (
+                                  <li 
+                                    key={idx}
+                                    className={`list-group-item list-group-item-action p-2 product-item-${index}`}
+                                    onClick={() => selectProduct(product, index)}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onKeyDown={(e) => handleProductItemKeyDown(e, product, index)}
+                                    style={{ cursor: 'pointer' }}
+                                    tabIndex={0}
+                                  >
+                                    <div className="d-flex justify-content-between">
+                                      <span>{product.name}</span>
+                                      <span className="text-muted">₹{product.price.toFixed(2)}</span>
+                                    </div>
+                                    <div className="text-muted small">{product.nameTamil}</div>
+                                    <div className="text-muted small">Available: {product.stock}</div>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="text-center text-muted p-2">No products found</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </td>
-                <td>{item.productName}</td>
+                <td>{item.productNameTamil || '-'}</td>
                 <td>
                   <input
                     type="number"
@@ -576,21 +712,21 @@ const Billing = () => {
                     }}
                     ref={el => quantityRefs.current[index] = el}
                     min="1"
-                    max={products.find(p => p._id === parseInt(item.productId))?.stock || ''}
+                    max={products.find(p => p._id === item.productId)?.stock || ''}
                   />
-                  {item.productId && (
-                    <small className="text-muted">
-                      Available: {products.find(p => p._id === parseInt(item.productId))?.stock || 0}
-                    </small>
-                  )}
                 </td>
-                <td>{item.price.toFixed(2)}</td>
+                <td>₹{item.price.toFixed(2)}</td>
                 <td>₹{calculateTotal(item).toFixed(2)}</td>
+                <td>
+                  {item.productId ? (
+                    products.find(p => p._id === item.productId)?.stock || 0
+                  ) : '-'}
+                </td>
               </tr>
             ))}
             <tr>
               <td colSpan="5" className="text-end"><strong>Grand Total:</strong></td>
-              <td><strong>₹{grandTotal.toFixed(2)}</strong></td>
+              <td colSpan="2"><strong>₹{grandTotal.toFixed(2)}</strong></td>
             </tr>
           </tbody>
         </table>
