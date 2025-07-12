@@ -5,8 +5,10 @@ const StockManagement = () => {
   const [stockEntries, setStockEntries] = useState([{ 
     productId: '', 
     productName: '', 
+    productNameTamil: '',
     currentStock: 0,
-    newQuantity: '' 
+    newQuantity: '',
+    productSearch: ''
   }]);
   const [productEdit, setProductEdit] = useState({
     id: '',
@@ -16,25 +18,59 @@ const StockManagement = () => {
     minStockLevel: ''
   });
   const [activeRow, setActiveRow] = useState(0);
-  const [activeField, setActiveField] = useState('productId');
+  const [activeField, setActiveField] = useState('productSearch');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [showEditProductDropdown, setShowEditProductDropdown] = useState(false);
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [editProductSearch, setEditProductSearch] = useState('');
   
-  const productIdRefs = useRef([]);
+  const productSearchRefs = useRef([]);
   const quantityRefs = useRef([]);
+  const editProductSearchRef = useRef(null);
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
   useEffect(() => {
-    if (activeField === 'productId' && productIdRefs.current[activeRow]) {
-      productIdRefs.current[activeRow].focus();
+    if (activeField === 'productSearch' && productSearchRefs.current[activeRow]) {
+      productSearchRefs.current[activeRow].focus();
     } else if (activeField === 'quantity' && quantityRefs.current[activeRow]) {
       quantityRefs.current[activeRow].focus();
     }
   }, [activeRow, activeField]);
+
+  useEffect(() => {
+    if (stockEntries[activeRow]?.productSearch) {
+      const searchTerm = stockEntries[activeRow].productSearch.toLowerCase();
+      const filtered = products.filter(product => 
+        product.name.toLowerCase().includes(searchTerm) ||
+        product.nameTamil.toLowerCase().includes(searchTerm)
+      );
+      setFilteredProducts(filtered);
+      setShowProductDropdown(true);
+    } else {
+      setFilteredProducts(products);
+      setShowProductDropdown(false);
+    }
+  }, [stockEntries, activeRow, products]);
+
+  useEffect(() => {
+    if (editProductSearch) {
+      const filtered = products.filter(product => 
+        product.name.toLowerCase().includes(editProductSearch.toLowerCase()) ||
+        product.nameTamil.toLowerCase().includes(editProductSearch.toLowerCase())
+      );
+      setFilteredProducts(filtered);
+      setShowEditProductDropdown(true);
+    } else {
+      setFilteredProducts(products);
+      setShowEditProductDropdown(false);
+    }
+  }, [editProductSearch, products]);
 
   const fetchProducts = async () => {
     try {
@@ -51,7 +87,8 @@ const StockManagement = () => {
         throw new Error('Invalid data format received from server');
       }
       
-      setProducts(data.sort((a, b) => a._id - b._id));
+      setProducts(data.sort((a, b) => a.name.localeCompare(b.name)));
+      setFilteredProducts(data);
     } catch (err) {
       console.error('Fetch products error:', err);
       setError(err.message || 'Failed to load products. Please try again later.');
@@ -60,58 +97,146 @@ const StockManagement = () => {
     }
   };
 
+  const selectProduct = (product, index) => {
+    const updatedEntries = [...stockEntries];
+    updatedEntries[index] = {
+      ...updatedEntries[index],
+      productId: product._id,
+      productName: product.name,
+      productNameTamil: product.nameTamil,
+      currentStock: product.stock,
+      productSearch: ''
+    };
+    setStockEntries(updatedEntries);
+    setShowProductDropdown(false);
+    setTimeout(() => {
+      if (quantityRefs.current[index]) {
+        quantityRefs.current[index].focus();
+      }
+    }, 0);
+  };
+
+  const selectEditProduct = (product) => {
+    setProductEdit({
+      id: product._id,
+      name: product.name,
+      nameTamil: product.nameTamil,
+      price: product.price,
+      minStockLevel: product.minStockLevel
+    });
+    setEditProductSearch(product.nameTamil || product.name);
+    setShowEditProductDropdown(false);
+  };
+
   const handleStockInputChange = (index, field, value) => {
     const updatedEntries = [...stockEntries];
-    
-    if (field === 'productId') {
-      const productId = parseInt(value);
-      if (!isNaN(productId)) {
-        const product = products.find(p => p._id === productId);
-        updatedEntries[index].productName = product ? product.nameTamil : '';
-        updatedEntries[index].currentStock = product ? product.stock : 0;
-      }
-      updatedEntries[index][field] = value;
-    } else {
-      updatedEntries[index][field] = value;
-    }
-    
+    updatedEntries[index][field] = value;
     setStockEntries(updatedEntries);
+  };
+
+  const handleProductKeyDown = (e, index) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredProducts.length === 1) {
+        selectProduct(filteredProducts[0], index);
+      }
+    } else if (e.key === 'ArrowDown' && showProductDropdown) {
+      e.preventDefault();
+      const firstItem = document.querySelector(`.stock-product-item-${index}`);
+      if (firstItem) firstItem.focus();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      setActiveField('quantity');
+    }
+  };
+
+  const handleEditProductKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredProducts.length === 1) {
+        selectEditProduct(filteredProducts[0]);
+      }
+    } else if (e.key === 'ArrowDown' && showEditProductDropdown) {
+      e.preventDefault();
+      const firstItem = document.querySelector('.edit-product-item');
+      if (firstItem) firstItem.focus();
+    }
+  };
+
+  const handleProductItemKeyDown = (e, product, index) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      selectProduct(product, index);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextItem = e.currentTarget.nextElementSibling;
+      if (nextItem) nextItem.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevItem = e.currentTarget.previousElementSibling;
+      if (prevItem) prevItem.focus();
+      else productSearchRefs.current[index].focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      productSearchRefs.current[index].focus();
+      setShowProductDropdown(false);
+    }
+  };
+
+  const handleEditProductItemKeyDown = (e, product) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      selectEditProduct(product);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextItem = e.currentTarget.nextElementSibling;
+      if (nextItem) nextItem.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevItem = e.currentTarget.previousElementSibling;
+      if (prevItem) prevItem.focus();
+      else editProductSearchRef.current.focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      editProductSearchRef.current.focus();
+      setShowEditProductDropdown(false);
+    }
   };
 
   const handleStockKeyDown = (e, index, field) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (field === 'productId') {
-        if (stockEntries[index].productId && stockEntries[index].productName) {
-          setActiveField('quantity');
-        }
-      } else if (field === 'quantity') {
+      if (field === 'quantity') {
         if (index === stockEntries.length - 1) {
           setStockEntries([...stockEntries, { 
             productId: '', 
             productName: '', 
+            productNameTamil: '',
             currentStock: 0,
-            newQuantity: '' 
+            newQuantity: '',
+            productSearch: ''
           }]);
         }
         setActiveRow(index + 1);
-        setActiveField('productId');
+        setActiveField('productSearch');
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      if (field === 'productId') {
+      if (field === 'productSearch') {
         setActiveField('quantity');
       } else if (field === 'quantity') {
         if (index === stockEntries.length - 1) {
           setStockEntries([...stockEntries, { 
             productId: '', 
             productName: '', 
+            productNameTamil: '',
             currentStock: 0,
-            newQuantity: '' 
+            newQuantity: '',
+            productSearch: ''
           }]);
         }
         setActiveRow(index + 1);
-        setActiveField('productId');
+        setActiveField('productSearch');
       }
     }
   };
@@ -119,7 +244,7 @@ const StockManagement = () => {
   const handleUpdateStock = async (index) => {
     const entry = stockEntries[index];
     if (!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)) {
-      alert('Please enter valid product ID and quantity');
+      alert('Please select a product and enter valid quantity');
       return;
     }
 
@@ -128,7 +253,7 @@ const StockManagement = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productId: parseInt(entry.productId),
+          productId: entry.productId,
           quantity: parseInt(entry.newQuantity)
         })
       });
@@ -145,7 +270,7 @@ const StockManagement = () => {
       updatedEntries[index].newQuantity = '';
       setStockEntries(updatedEntries);
 
-      setSuccessMessage(`Stock updated successfully for ${entry.productName}`);
+      setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
       setTimeout(() => setSuccessMessage(''), 3000);
       
     } catch (err) {
@@ -155,62 +280,65 @@ const StockManagement = () => {
     }
   };
 
-const handleBulkUpdate = async () => {
-  const validEntries = stockEntries
-    .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
-    .map(entry => ({
-      productId: parseInt(entry.productId),
-      quantity: parseInt(entry.newQuantity)
-    }));
+  const handleBulkUpdate = async () => {
+    const validEntries = stockEntries
+      .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
+      .map(entry => ({
+        productId: entry.productId,
+        quantity: parseInt(entry.newQuantity)
+      }));
 
-  if (validEntries.length === 0) {
-    alert('No valid entries to update');
-    return;
-  }
-
-  try {
-    const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ updates: validEntries })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
+    if (validEntries.length === 0) {
+      alert('No valid entries to update');
+      return;
     }
 
-    await fetchProducts();
-    
-    // Clear the stock entries table after successful update
-    setStockEntries([{ 
-      productId: '', 
-      productName: '', 
-      currentStock: 0,
-      newQuantity: '' 
-    }]);
-    setActiveRow(0);
-    setActiveField('productId');
+    try {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: validEntries })
+      });
 
-    setSuccessMessage(`Successfully updated ${validEntries.length} products`);
-    setTimeout(() => setSuccessMessage(''), 3000);
-    
-  } catch (err) {
-    console.error('Bulk update error:', err);
-    setError(err.message || 'Failed to perform bulk update. Please check the endpoint.');
-    setTimeout(() => setError(null), 5000);
-  }
-};
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
+      }
+
+      await fetchProducts();
+      
+      setStockEntries([{ 
+        productId: '', 
+        productName: '', 
+        productNameTamil: '',
+        currentStock: 0,
+        newQuantity: '',
+        productSearch: ''
+      }]);
+      setActiveRow(0);
+      setActiveField('productSearch');
+
+      setSuccessMessage(`Successfully updated ${validEntries.length} products`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+    } catch (err) {
+      console.error('Bulk update error:', err);
+      setError(err.message || 'Failed to perform bulk update. Please check the endpoint.');
+      setTimeout(() => setError(null), 5000);
+    }
+  };
 
   const resetStockForm = () => {
     setStockEntries([{ 
       productId: '', 
       productName: '', 
+      productNameTamil: '',
       currentStock: 0,
-      newQuantity: '' 
+      newQuantity: '',
+      productSearch: ''
     }]);
     setActiveRow(0);
-    setActiveField('productId');
+    setActiveField('productSearch');
   };
 
   const handleEditSubmit = async (e) => {
@@ -240,6 +368,7 @@ const handleBulkUpdate = async () => {
         price: '',
         minStockLevel: ''
       });
+      setEditProductSearch('');
       setSuccessMessage('Product details updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
       
@@ -258,6 +387,7 @@ const handleBulkUpdate = async () => {
       price: product.price,
       minStockLevel: product.minStockLevel
     });
+    setEditProductSearch(product.nameTamil || product.name);
   };
 
   return (
@@ -276,8 +406,7 @@ const handleBulkUpdate = async () => {
               <thead>
                 <tr>
                   <th width="5%">#</th>
-                  <th width="15%">Product ID</th>
-                  <th width="30%">Product Name</th>
+                  <th width="25%">Product</th>
                   <th width="15%">Current Stock</th>
                   <th width="15%">New Quantity</th>
                   <th width="20%">Action</th>
@@ -288,20 +417,65 @@ const handleBulkUpdate = async () => {
                   <tr key={index} className={activeRow === index ? 'table-active' : ''}>
                     <td>{index + 1}</td>
                     <td>
-                      <input
-                        type="number"
-                        className="form-control form-control-sm"
-                        value={entry.productId}
-                        onChange={(e) => handleStockInputChange(index, 'productId', e.target.value)}
-                        onKeyDown={(e) => handleStockKeyDown(e, index, 'productId')}
-                        onFocus={() => {
-                          setActiveRow(index);
-                          setActiveField('productId');
-                        }}
-                        ref={el => productIdRefs.current[index] = el}
-                      />
+                      <div className="position-relative">
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={entry.productId ? entry.productNameTamil || entry.productName : entry.productSearch}
+                          onChange={(e) => {
+                            handleStockInputChange(index, 'productSearch', e.target.value);
+                          }}
+                          onKeyDown={(e) => handleProductKeyDown(e, index)}
+                          onFocus={() => {
+                            setActiveRow(index);
+                            setActiveField('productSearch');
+                            if (!entry.productId) {
+                              setShowProductDropdown(true);
+                            }
+                          }}
+                          ref={el => productSearchRefs.current[index] = el}
+                          placeholder="Search product..."
+                        />
+                        {showProductDropdown && activeRow === index && (
+                          <div className="card position-absolute w-100" style={{ zIndex: 1000 }}>
+                            <div className="card-body p-2">
+                              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                {filteredProducts.length > 0 ? (
+                                  <ul className="list-group list-group-flush">
+                                    {filteredProducts.map((product, idx) => (
+                                      <li 
+                                        key={idx}
+                                        className={`list-group-item list-group-item-action p-2 stock-product-item-${index}`}
+                                        onClick={() => selectProduct(product, index)}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onKeyDown={(e) => handleProductItemKeyDown(e, product, index)}
+                                        style={{ cursor: 'pointer' }}
+                                        tabIndex={0}
+                                      >
+                                        <div className="d-flex justify-content-between">
+                                          <span>{product.nameTamil || product.name}</span>
+                                        </div>
+                                        <div className="text-muted small">
+                                          {product.nameTamil && product.name !== product.nameTamil ? product.name : ''}
+                                        </div>
+                                        <div className="text-muted small">Stock: {product.stock}</div>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <div className="text-center text-muted p-2">No products found</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {entry.productId && (
+                        <div className="small text-muted">
+                          {entry.productNameTamil && entry.productName !== entry.productNameTamil ? entry.productName : ''}
+                        </div>
+                      )}
                     </td>
-                    <td>{entry.productName}</td>
                     <td>{entry.currentStock}</td>
                     <td>
                       <input
@@ -346,8 +520,10 @@ const handleBulkUpdate = async () => {
                 onClick={() => setStockEntries([...stockEntries, { 
                   productId: '', 
                   productName: '', 
+                  productNameTamil: '',
                   currentStock: 0,
-                  newQuantity: '' 
+                  newQuantity: '',
+                  productSearch: ''
                 }])}
               >
                 Add Row
@@ -371,22 +547,56 @@ const handleBulkUpdate = async () => {
             <div className="row mb-3">
               <div className="col-md-6">
                 <label className="form-label">Select Product</label>
-                <select
-                  className="form-control"
-                  value={productEdit.id}
-                  onChange={(e) => {
-                    const selectedProduct = products.find(p => p._id === Number(e.target.value));
-                    if (selectedProduct) loadProductForEdit(selectedProduct);
-                  }}
-                  required
-                >
-                  <option value="">Select a product</option>
-                  {products.map(product => (
-                    <option key={product._id} value={product._id}>
-                      {product._id} - {product.nameTamil}
-                    </option>
-                  ))}
-                </select>
+                <div className="position-relative">
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={editProductSearch}
+                    onChange={(e) => setEditProductSearch(e.target.value)}
+                    onKeyDown={handleEditProductKeyDown}
+                    onFocus={() => {
+                      if (editProductSearch.length > 0) {
+                        setShowEditProductDropdown(true);
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setShowEditProductDropdown(false), 200)}
+                    ref={editProductSearchRef}
+                    placeholder="Search product..."
+                  />
+                  {showEditProductDropdown && (
+                    <div className="card position-absolute w-100" style={{ zIndex: 1000 }}>
+                      <div className="card-body p-2">
+                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                          {filteredProducts.length > 0 ? (
+                            <ul className="list-group list-group-flush">
+                              {filteredProducts.map((product, idx) => (
+                                <li 
+                                  key={idx}
+                                  className="list-group-item list-group-item-action p-2 edit-product-item"
+                                  onClick={() => selectEditProduct(product)}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onKeyDown={(e) => handleEditProductItemKeyDown(e, product)}
+                                  style={{ cursor: 'pointer' }}
+                                  tabIndex={0}
+                                >
+                                  <div className="d-flex justify-content-between">
+                                    <span>{product.nameTamil || product.name}</span>
+                                  </div>
+                                  <div className="text-muted small">
+                                    {product.nameTamil && product.name !== product.nameTamil ? product.name : ''}
+                                  </div>
+                                  <div className="text-muted small">Price: ₹{product.price.toFixed(2)}</div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="text-center text-muted p-2">No products found</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             
