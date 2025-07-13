@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 const StockManagement = () => {
   const [products, setProducts] = useState([]);
   const [stockEntries, setStockEntries] = useState([{ 
-    productId: '', 
     productName: '', 
     productNameTamil: '',
     currentStock: 0,
@@ -11,7 +10,8 @@ const StockManagement = () => {
     productSearch: ''
   }]);
   const [productEdit, setProductEdit] = useState({
-    id: '',
+    originalName: '',
+    originalNameTamil: '',
     name: '',
     nameTamil: '',
     price: '',
@@ -101,7 +101,6 @@ const StockManagement = () => {
     const updatedEntries = [...stockEntries];
     updatedEntries[index] = {
       ...updatedEntries[index],
-      productId: product._id,
       productName: product.name,
       productNameTamil: product.nameTamil,
       currentStock: product.stock,
@@ -118,7 +117,8 @@ const StockManagement = () => {
 
   const selectEditProduct = (product) => {
     setProductEdit({
-      id: product._id,
+      originalName: product.name,
+      originalNameTamil: product.nameTamil,
       name: product.name,
       nameTamil: product.nameTamil,
       price: product.price,
@@ -209,7 +209,6 @@ const StockManagement = () => {
       if (field === 'quantity') {
         if (index === stockEntries.length - 1) {
           setStockEntries([...stockEntries, { 
-            productId: '', 
             productName: '', 
             productNameTamil: '',
             currentStock: 0,
@@ -227,7 +226,6 @@ const StockManagement = () => {
       } else if (field === 'quantity') {
         if (index === stockEntries.length - 1) {
           setStockEntries([...stockEntries, { 
-            productId: '', 
             productName: '', 
             productNameTamil: '',
             currentStock: 0,
@@ -240,53 +238,55 @@ const StockManagement = () => {
       }
     }
   };
-const handleUpdateStock = async (index) => {
-  const entry = stockEntries[index];
-  if (!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)) {
-    alert('Please select a product and enter valid quantity');
-    return;
-  }
 
-  try {
-    const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}` // Add if using auth
-      },
-      body: JSON.stringify({
-        productId: entry.productId,
-        quantity: parseInt(entry.newQuantity)
-      })
-    });
-
-    const data = await response.json(); // Parse response first
-    
-    if (!response.ok) {
-      throw new Error(data.message || `Stock update failed. Status: ${response.status}`);
+  const handleUpdateStock = async (index) => {
+    const entry = stockEntries[index];
+    if (!entry.productName || !entry.newQuantity || isNaN(entry.newQuantity)) {
+      alert('Please select a product and enter valid quantity');
+      return;
     }
 
-    await fetchProducts();
-    
-    const updatedEntries = [...stockEntries];
-    updatedEntries[index].currentStock = data.product.stock; // Use updated stock from response
-    updatedEntries[index].newQuantity = '';
-    setStockEntries(updatedEntries);
+    try {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/update-stock-by-name', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          productName: entry.productNameTamil || entry.productName,
+          quantity: parseInt(entry.newQuantity)
+        })
+      });
 
-    setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
-    setTimeout(() => setSuccessMessage(''), 3000);
-    
-  } catch (err) {
-    console.error('Update stock error:', err);
-    setError(err.message || 'Failed to update stock. Please check the endpoint.');
-    setTimeout(() => setError(null), 5000);
-  }
-};
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || `Stock update failed. Status: ${response.status}`);
+      }
+
+      await fetchProducts();
+      
+      const updatedEntries = [...stockEntries];
+      updatedEntries[index].currentStock = data.product.stock;
+      updatedEntries[index].newQuantity = '';
+      setStockEntries(updatedEntries);
+
+      setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+    } catch (err) {
+      console.error('Update stock error:', err);
+      setError(err.message || 'Failed to update stock. Please check the endpoint.');
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
   const handleBulkUpdate = async () => {
     const validEntries = stockEntries
-      .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
+      .filter(entry => entry.productName && entry.newQuantity && !isNaN(entry.newQuantity))
       .map(entry => ({
-        productId: entry.productId,
+        productName: entry.productNameTamil || entry.productName,
         quantity: parseInt(entry.newQuantity)
       }));
 
@@ -296,7 +296,7 @@ const handleUpdateStock = async (index) => {
     }
 
     try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/update-stock-bulk-by-name', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates: validEntries })
@@ -310,7 +310,6 @@ const handleUpdateStock = async (index) => {
       await fetchProducts();
       
       setStockEntries([{ 
-        productId: '', 
         productName: '', 
         productNameTamil: '',
         currentStock: 0,
@@ -332,7 +331,6 @@ const handleUpdateStock = async (index) => {
 
   const resetStockForm = () => {
     setStockEntries([{ 
-      productId: '', 
       productName: '', 
       productNameTamil: '',
       currentStock: 0,
@@ -346,14 +344,17 @@ const handleUpdateStock = async (index) => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`https://billing-server-gaha.onrender.com/api/products/${productEdit.id}`, {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/update-by-name', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: productEdit.name,
-          nameTamil: productEdit.nameTamil,
-          price: productEdit.price,
-          minStockLevel: productEdit.minStockLevel
+          name: productEdit.originalNameTamil || productEdit.originalName,
+          newData: {
+            name: productEdit.name,
+            nameTamil: productEdit.nameTamil,
+            price: productEdit.price,
+            minStockLevel: productEdit.minStockLevel
+          }
         })
       });
 
@@ -364,7 +365,8 @@ const handleUpdateStock = async (index) => {
 
       await fetchProducts();
       setProductEdit({
-        id: '',
+        originalName: '',
+        originalNameTamil: '',
         name: '',
         nameTamil: '',
         price: '',
@@ -383,7 +385,8 @@ const handleUpdateStock = async (index) => {
 
   const loadProductForEdit = (product) => {
     setProductEdit({
-      id: product._id,
+      originalName: product.name,
+      originalNameTamil: product.nameTamil,
       name: product.name,
       nameTamil: product.nameTamil,
       price: product.price,
@@ -423,7 +426,7 @@ const handleUpdateStock = async (index) => {
                         <input
                           type="text"
                           className="form-control form-control-sm"
-                          value={entry.productId ? entry.productNameTamil || entry.productName : entry.productSearch}
+                          value={entry.productName ? entry.productNameTamil || entry.productName : entry.productSearch}
                           onChange={(e) => {
                             handleStockInputChange(index, 'productSearch', e.target.value);
                           }}
@@ -431,7 +434,7 @@ const handleUpdateStock = async (index) => {
                           onFocus={() => {
                             setActiveRow(index);
                             setActiveField('productSearch');
-                            if (!entry.productId) {
+                            if (!entry.productName) {
                               setShowProductDropdown(true);
                             }
                           }}
@@ -472,7 +475,7 @@ const handleUpdateStock = async (index) => {
                           </div>
                         )}
                       </div>
-                      {entry.productId && (
+                      {entry.productName && (
                         <div className="small text-muted">
                           {entry.productNameTamil && entry.productName !== entry.productNameTamil ? entry.productName : ''}
                         </div>
@@ -498,7 +501,7 @@ const handleUpdateStock = async (index) => {
                       <button 
                         className="btn btn-sm btn-primary"
                         onClick={() => handleUpdateStock(index)}
-                        disabled={!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)}
+                        disabled={!entry.productName || !entry.newQuantity || isNaN(entry.newQuantity)}
                       >
                         Update
                       </button>
@@ -512,7 +515,7 @@ const handleUpdateStock = async (index) => {
             <button 
               className="btn btn-danger" 
               onClick={resetStockForm}
-              disabled={stockEntries.length === 1 && !stockEntries[0].productId && !stockEntries[0].newQuantity}
+              disabled={stockEntries.length === 1 && !stockEntries[0].productName && !stockEntries[0].newQuantity}
             >
               Clear
             </button>
@@ -520,7 +523,6 @@ const handleUpdateStock = async (index) => {
               <button 
                 className="btn btn-secondary me-2"
                 onClick={() => setStockEntries([...stockEntries, { 
-                  productId: '', 
                   productName: '', 
                   productNameTamil: '',
                   currentStock: 0,
@@ -533,7 +535,7 @@ const handleUpdateStock = async (index) => {
               <button 
                 className="btn btn-success" 
                 onClick={handleBulkUpdate}
-                disabled={!stockEntries.some(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))}
+                disabled={!stockEntries.some(entry => entry.productName && entry.newQuantity && !isNaN(entry.newQuantity))}
               >
                 Bulk Update
               </button>
@@ -602,7 +604,7 @@ const handleUpdateStock = async (index) => {
               </div>
             </div>
             
-            {productEdit.id && (
+            {productEdit.name && (
               <>
                 <div className="row mb-3">
                   <div className="col-md-6">
@@ -667,7 +669,6 @@ const handleUpdateStock = async (index) => {
             <table className="table table-striped">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Name (English)</th>
                   <th>Name (Tamil)</th>
                   <th>Price</th>
@@ -679,7 +680,6 @@ const handleUpdateStock = async (index) => {
               <tbody>
                 {products.map(product => (
                   <tr key={product._id}>
-                    <td>{product._id}</td>
                     <td>{product.name}</td>
                     <td>{product.nameTamil}</td>
                     <td>₹{product.price.toFixed(2)}</td>
