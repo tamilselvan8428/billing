@@ -95,6 +95,12 @@ const Billing = () => {
   };
 
   const selectProduct = (product, index) => {
+    // Check if product is out of stock
+    if (product.stock <= 0) {
+      alert(`${product.nameTamil || product.name} is out of stock`);
+      return;
+    }
+
     const updatedItems = [...billItems];
     updatedItems[index] = {
       ...updatedItems[index],
@@ -218,9 +224,33 @@ const Billing = () => {
       
       if (field === 'quantity') {
         const product = products.find(p => p._id === billItems[index].productId);
-        if (product && parseInt(billItems[index].quantity) > product.stock) {
-          alert(`Only ${product.stock} items available for ${product.nameTamil}`);
-          return;
+        if (product) {
+          // If product is out of stock
+          if (product.stock <= 0) {
+            // Remove the row
+            const updatedItems = [...billItems];
+            updatedItems.splice(index, 1);
+            setBillItems(updatedItems);
+            
+            // Adjust active row if needed
+            if (index >= updatedItems.length) {
+              setActiveRow(updatedItems.length - 1);
+            } else {
+              setActiveRow(index);
+            }
+            setActiveField('productSearch');
+            
+            alert(`${product.nameTamil || product.name} is out of stock and has been removed from the bill`);
+            return;
+          }
+          
+          const quantity = parseInt(billItems[index].quantity);
+          
+          // If quantity exceeds available stock
+          if (quantity > product.stock) {
+            alert(`Only ${product.stock} items available for ${product.nameTamil || product.name}`);
+            return;
+          }
         }
 
         if (index === billItems.length - 1) {
@@ -240,6 +270,25 @@ const Billing = () => {
       if (field === 'productSearch') {
         setActiveField('quantity');
       } else if (field === 'quantity') {
+        const product = products.find(p => p._id === billItems[index].productId);
+        if (product && product.stock <= 0) {
+          // Remove the row if product is out of stock
+          const updatedItems = [...billItems];
+          updatedItems.splice(index, 1);
+          setBillItems(updatedItems);
+          
+          // Adjust active row if needed
+          if (index >= updatedItems.length) {
+            setActiveRow(updatedItems.length - 1);
+          } else {
+            setActiveRow(index);
+          }
+          setActiveField('productSearch');
+          
+          alert(`${product.nameTamil || product.name} is out of stock and has been removed from the bill`);
+          return;
+        }
+
         if (index === billItems.length - 1) {
           setBillItems([...billItems, { 
             productId: '', 
@@ -682,7 +731,7 @@ const Billing = () => {
                                   >
                                     <div className="d-flex justify-content-between">
                                       <span>{product.name}</span>
-                                      <span className="text-muted">₹{product.price.toFixed(2)}</span>
+                                      <span className="text-muted">₹${product.price.toFixed(2)}</span>
                                     </div>
                                     <div className="text-muted small">{product.nameTamil}</div>
                                     <div className="text-muted small">Available: {product.stock}</div>
