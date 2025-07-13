@@ -95,7 +95,6 @@ const Billing = () => {
   };
 
   const selectProduct = (product, index) => {
-    // Check if product is out of stock
     if (product.stock <= 0) {
       alert(`${product.nameTamil || product.name} is out of stock`);
       return;
@@ -182,6 +181,36 @@ const Billing = () => {
     setBillItems(updatedItems);
   };
 
+  const removeProduct = (index) => {
+    const updatedItems = [...billItems];
+    updatedItems.splice(index, 1);
+    
+    // If we removed the last item, add a new empty row
+    if (updatedItems.length === 0) {
+      updatedItems.push({ 
+        productId: '', 
+        quantity: '', 
+        productName: '', 
+        productNameTamil: '',
+        price: 0
+      });
+    }
+    
+    setBillItems(updatedItems);
+    
+    // Always move to the last row after removal
+    const lastRowIndex = updatedItems.length - 1;
+    setActiveRow(lastRowIndex);
+    setActiveField('productSearch');
+    
+    // Focus on the product search field of the last row
+    setTimeout(() => {
+      if (productSearchRefs.current[lastRowIndex]) {
+        productSearchRefs.current[lastRowIndex].focus();
+      }
+    }, 0);
+  };
+
   const handleProductKeyDown = (e, index) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -195,6 +224,11 @@ const Billing = () => {
     } else if (e.key === 'Tab') {
       e.preventDefault();
       setActiveField('quantity');
+    } else if (e.key === 'Backspace' && productSearch === '' && e.target.selectionStart === 0) {
+      e.preventDefault();
+      if (billItems.length > 1) {
+        removeProduct(index);
+      }
     }
   };
 
@@ -219,34 +253,37 @@ const Billing = () => {
   };
 
   const handleKeyDown = (e, index, field) => {
+    if (e.key === 'Backspace') {
+      // If at start of quantity field with empty value, move back to product search
+      if (field === 'quantity' && billItems[index].quantity === '' && e.target.selectionStart === 0) {
+        e.preventDefault();
+        setActiveField('productSearch');
+        return;
+      }
+      // If at start of product search with empty value, remove the row
+      if (field === 'productSearch' && productSearch === '' && e.target.selectionStart === 0) {
+        e.preventDefault();
+        if (billItems.length > 1) {
+          removeProduct(index);
+        }
+        return;
+      }
+      return; // Let the default backspace behavior happen
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault();
       
       if (field === 'quantity') {
         const product = products.find(p => p._id === billItems[index].productId);
         if (product) {
-          // If product is out of stock
           if (product.stock <= 0) {
-            // Remove the row
-            const updatedItems = [...billItems];
-            updatedItems.splice(index, 1);
-            setBillItems(updatedItems);
-            
-            // Adjust active row if needed
-            if (index >= updatedItems.length) {
-              setActiveRow(updatedItems.length - 1);
-            } else {
-              setActiveRow(index);
-            }
-            setActiveField('productSearch');
-            
+            removeProduct(index);
             alert(`${product.nameTamil || product.name} is out of stock and has been removed from the bill`);
             return;
           }
           
           const quantity = parseInt(billItems[index].quantity);
-          
-          // If quantity exceeds available stock
           if (quantity > product.stock) {
             alert(`Only ${product.stock} items available for ${product.nameTamil || product.name}`);
             return;
@@ -272,19 +309,7 @@ const Billing = () => {
       } else if (field === 'quantity') {
         const product = products.find(p => p._id === billItems[index].productId);
         if (product && product.stock <= 0) {
-          // Remove the row if product is out of stock
-          const updatedItems = [...billItems];
-          updatedItems.splice(index, 1);
-          setBillItems(updatedItems);
-          
-          // Adjust active row if needed
-          if (index >= updatedItems.length) {
-            setActiveRow(updatedItems.length - 1);
-          } else {
-            setActiveRow(index);
-          }
-          setActiveField('productSearch');
-          
+          removeProduct(index);
           alert(`${product.nameTamil || product.name} is out of stock and has been removed from the bill`);
           return;
         }
@@ -299,6 +324,12 @@ const Billing = () => {
           }]);
         }
         setActiveRow(index + 1);
+        setActiveField('productSearch');
+      }
+    } else if (e.key === 'ArrowLeft') {
+      // If at start of quantity field, move back to product search
+      if (field === 'quantity' && e.target.selectionStart === 0) {
+        e.preventDefault();
         setActiveField('productSearch');
       }
     }
@@ -682,6 +713,7 @@ const Billing = () => {
               <th width="10%">Price</th>
               <th width="10%">Total</th>
               <th width="15%">Available</th>
+              <th width="10%">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -771,10 +803,19 @@ const Billing = () => {
                     products.find(p => p._id === item.productId)?.stock || 0
                   ) : '-'}
                 </td>
+                <td>
+                  <button 
+                    className="btn btn-sm btn-danger"
+                    onClick={() => removeProduct(index)}
+                    disabled={billItems.length === 1 && !billItems[0].productId && !billItems[0].quantity}
+                  >
+                    Remove
+                  </button>
+                </td>
               </tr>
             ))}
             <tr>
-              <td colSpan="5" className="text-end"><strong>Grand Total:</strong></td>
+              <td colSpan="6" className="text-end"><strong>Grand Total:</strong></td>
               <td colSpan="2"><strong>₹{grandTotal.toFixed(2)}</strong></td>
             </tr>
           </tbody>
