@@ -240,46 +240,48 @@ const StockManagement = () => {
       }
     }
   };
+const handleUpdateStock = async (index) => {
+  const entry = stockEntries[index];
+  if (!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)) {
+    alert('Please select a product and enter valid quantity');
+    return;
+  }
 
-  const handleUpdateStock = async (index) => {
-    const entry = stockEntries[index];
-    if (!entry.productId || !entry.newQuantity || isNaN(entry.newQuantity)) {
-      alert('Please select a product and enter valid quantity');
-      return;
+  try {
+    const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}` // Add if using auth
+      },
+      body: JSON.stringify({
+        productId: entry.productId,
+        quantity: parseInt(entry.newQuantity)
+      })
+    });
+
+    const data = await response.json(); // Parse response first
+    
+    if (!response.ok) {
+      throw new Error(data.message || `Stock update failed. Status: ${response.status}`);
     }
 
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: entry.productId,
-          quantity: parseInt(entry.newQuantity)
-        })
-      });
+    await fetchProducts();
+    
+    const updatedEntries = [...stockEntries];
+    updatedEntries[index].currentStock = data.product.stock; // Use updated stock from response
+    updatedEntries[index].newQuantity = '';
+    setStockEntries(updatedEntries);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Stock update failed. Status: ${response.status}`);
-      }
-
-      await fetchProducts();
-      
-      const updatedEntries = [...stockEntries];
-      updatedEntries[index].currentStock = parseInt(entry.newQuantity);
-      updatedEntries[index].newQuantity = '';
-      setStockEntries(updatedEntries);
-
-      setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-      
-    } catch (err) {
-      console.error('Update stock error:', err);
-      setError(err.message || 'Failed to update stock. Please check the endpoint.');
-      setTimeout(() => setError(null), 5000);
-    }
-  };
-
+    setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+    
+  } catch (err) {
+    console.error('Update stock error:', err);
+    setError(err.message || 'Failed to update stock. Please check the endpoint.');
+    setTimeout(() => setError(null), 5000);
+  }
+};
   const handleBulkUpdate = async () => {
     const validEntries = stockEntries
       .filter(entry => entry.productId && entry.newQuantity && !isNaN(entry.newQuantity))
