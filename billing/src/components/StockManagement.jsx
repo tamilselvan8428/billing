@@ -239,96 +239,138 @@ const StockManagement = () => {
     }
   };
 
-  const handleUpdateStock = async (index) => {
-    const entry = stockEntries[index];
-    if (!entry.productName || !entry.newQuantity || isNaN(entry.newQuantity)) {
-      alert('Please select a product and enter valid quantity');
-      return;
+const handleUpdateStock = async (index) => {
+  const entry = stockEntries[index];
+  if (!entry.productName || !entry.newQuantity || isNaN(entry.newQuantity)) {
+    alert('Please select a product and enter valid quantity');
+    return;
+  }
+
+  try {
+    // First find the product by name to get its ID
+    const searchResponse = await fetch(
+      `https://billing-server-gaha.onrender.com/api/products/search?name=${encodeURIComponent(
+        entry.productNameTamil || entry.productName
+      )}`
+    );
+    
+    const searchData = await searchResponse.json();
+    
+    if (!searchData.success || !searchData.products || searchData.products.length === 0) {
+      throw new Error('Product not found');
     }
 
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/update-stock-by-name', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          productName: entry.productNameTamil || entry.productName,
-          quantity: parseInt(entry.newQuantity)
-        })
-      });
+    const product = searchData.products[0];
+    const productId = product._id;
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || `Stock update failed. Status: ${response.status}`);
-      }
-
-      await fetchProducts();
-      
-      const updatedEntries = [...stockEntries];
-      updatedEntries[index].currentStock = data.product.stock;
-      updatedEntries[index].newQuantity = '';
-      setStockEntries(updatedEntries);
-
-      setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-      
-    } catch (err) {
-      console.error('Update stock error:', err);
-      setError(err.message || 'Failed to update stock. Please check the endpoint.');
-      setTimeout(() => setError(null), 5000);
-    }
-  };
-
-  const handleBulkUpdate = async () => {
-    const validEntries = stockEntries
-      .filter(entry => entry.productName && entry.newQuantity && !isNaN(entry.newQuantity))
-      .map(entry => ({
-        productName: entry.productNameTamil || entry.productName,
+    // Then update the stock using the ID
+    const updateResponse = await fetch('https://billing-server-gaha.onrender.com/api/products/stock', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        productId: productId,
         quantity: parseInt(entry.newQuantity)
-      }));
+      })
+    });
 
-    if (validEntries.length === 0) {
-      alert('No valid entries to update');
-      return;
+    const updateData = await updateResponse.json();
+    
+    if (!updateResponse.ok) {
+      throw new Error(updateData.message || `Stock update failed. Status: ${updateResponse.status}`);
     }
 
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/products/update-stock-bulk-by-name', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates: validEntries })
-      });
+    // Refresh the product list
+    await fetchProducts();
+    
+    // Update the UI
+    const updatedEntries = [...stockEntries];
+    updatedEntries[index].currentStock = updateData.product.stock;
+    updatedEntries[index].newQuantity = '';
+    setStockEntries(updatedEntries);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
+    setSuccessMessage(`Stock updated successfully for ${entry.productNameTamil || entry.productName}`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+    
+  } catch (err) {
+    console.error('Update stock error:', err);
+    setError(err.message || 'Failed to update stock.');
+    setTimeout(() => setError(null), 5000);
+  }
+};
+
+const handleBulkUpdate = async () => {
+  // Prepare updates by first finding all product IDs
+  const updates = [];
+  
+  for (const entry of stockEntries) {
+    if (entry.productName && entry.newQuantity && !isNaN(entry.newQuantity)) {
+      try {
+        const searchResponse = await fetch(
+          `https://billing-server-gaha.onrender.com/api/products/search?name=${encodeURIComponent(
+            entry.productNameTamil || entry.productName
+          )}`
+        );
+        
+        const searchData = await searchResponse.json();
+        
+        if (searchData.success && searchData.products && searchData.products.length > 0) {
+          updates.push({
+            productId: searchData.products[0]._id,
+            quantity: parseInt(entry.newQuantity)
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to find product ${entry.productName}:`, err);
       }
-
-      await fetchProducts();
-      
-      setStockEntries([{ 
-        productName: '', 
-        productNameTamil: '',
-        currentStock: 0,
-        newQuantity: '',
-        productSearch: ''
-      }]);
-      setActiveRow(0);
-      setActiveField('productSearch');
-
-      setSuccessMessage(`Successfully updated ${validEntries.length} products`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-      
-    } catch (err) {
-      console.error('Bulk update error:', err);
-      setError(err.message || 'Failed to perform bulk update. Please check the endpoint.');
-      setTimeout(() => setError(null), 5000);
     }
-  };
+  }
 
+  if (updates.length === 0) {
+    alert('No valid entries to update');
+    return;
+  }
+
+  try {
+    const response = await fetch('https://billing-server-gaha.onrender.com/api/products/stock/bulk', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({ updates })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Bulk update failed. Status: ${response.status}`);
+    }
+
+    // Refresh the product list
+    await fetchProducts();
+    
+    // Reset the form
+    setStockEntries([{ 
+      productName: '', 
+      productNameTamil: '',
+      currentStock: 0,
+      newQuantity: '',
+      productSearch: ''
+    }]);
+    setActiveRow(0);
+    setActiveField('productSearch');
+
+    setSuccessMessage(`Successfully updated ${updates.length} products`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+    
+  } catch (err) {
+    console.error('Bulk update error:', err);
+    setError(err.message || 'Failed to perform bulk update.');
+    setTimeout(() => setError(null), 5000);
+  }
+};
   const resetStockForm = () => {
     setStockEntries([{ 
       productName: '', 
