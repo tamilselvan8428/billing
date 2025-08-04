@@ -67,7 +67,6 @@ const Billing = () => {
   const customerNameRefs = useRef(null);
   const mobileNumberRefs = useRef(null);
   const dropdownRefs = useRef(null);
-  const productDropdownRefs = useRef(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -171,19 +170,30 @@ const Billing = () => {
     ));
   };
 
-  const handleProductSearch = (billId, searchTerm) => {
+  const handleProductSearch = (billId, searchTerm, index) => {
     const filtered = products.filter(product => 
       product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product?.nameTamil?.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredProducts(filtered);
+    
+    // Update only the active row's product search
+    const bill = openBills.find(b => b.id === billId);
+    const updatedBillItems = [...bill.billItems];
+    updatedBillItems[index] = {
+      ...updatedBillItems[index],
+      productSearch: searchTerm
+    };
+    
     updateBillState(billId, {
+      billItems: updatedBillItems,
       productSearch: searchTerm,
-      showProductDropdown: searchTerm.length > 0
+      showProductDropdown: searchTerm.length > 0,
+      activeRow: index
     });
   };
 
-const selectProduct = (billId, product, index) => {
+  const selectProduct = (billId, product, index) => {
     if (!product || product.stock <= 0) {
       alert(`${product?.nameTamil || product?.name || 'Product'} is out of stock`);
       return;
@@ -204,7 +214,8 @@ const selectProduct = (billId, product, index) => {
       billItems: updatedItems,
       productSearch: product.name, // Show selected product name
       showProductDropdown: false,
-      activeField: 'quantity'
+      activeField: 'quantity',
+      activeRow: index
     });
     
     setTimeout(() => {
@@ -222,7 +233,10 @@ const selectProduct = (billId, product, index) => {
       if (filteredProducts.length === 1) {
         selectProduct(billId, filteredProducts[0], index);
       } else {
-        updateBillState(billId, { activeField: 'quantity' });
+        updateBillState(billId, { 
+          activeField: 'quantity',
+          activeRow: index
+        });
         setTimeout(() => {
           if (quantityRefs.current[index]) {
             quantityRefs.current[index].focus();
@@ -235,8 +249,11 @@ const selectProduct = (billId, product, index) => {
       if (firstItem) firstItem.focus();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      updateBillState(billId, { activeField: 'quantity' });
-    } else if (e.key === 'Backspace' && bill.productSearch === '' && e.target.selectionStart === 0) {
+      updateBillState(billId, { 
+        activeField: 'quantity',
+        activeRow: index
+      });
+    } else if (e.key === 'Backspace' && bill.billItems[index].productSearch === '' && e.target.selectionStart === 0) {
       e.preventDefault();
       if (bill.billItems.length > 1) {
         removeBillItem(billId, index);
@@ -273,7 +290,8 @@ const selectProduct = (billId, product, index) => {
             quantity: '', 
             productName: '', 
             productNameTamil: '',
-            price: 0
+            price: 0,
+            productSearch: ''
           }],
           activeRow: nextRowIndex,
           activeField: 'productSearch'
@@ -293,11 +311,17 @@ const selectProduct = (billId, product, index) => {
     } else if (e.key === 'ArrowLeft') {
       if (e.target.selectionStart === 0) {
         e.preventDefault();
-        updateBillState(billId, { activeField: 'productSearch' });
+        updateBillState(billId, { 
+          activeField: 'productSearch',
+          activeRow: index
+        });
       }
     } else if (e.key === 'Backspace' && bill.billItems[index].quantity === '' && e.target.selectionStart === 0) {
       e.preventDefault();
-      updateBillState(billId, { activeField: 'productSearch' });
+      updateBillState(billId, { 
+        activeField: 'productSearch',
+        activeRow: index
+      });
     }
   };
 
@@ -312,13 +336,14 @@ const selectProduct = (billId, product, index) => {
         quantity: '', 
         productName: '', 
         productNameTamil: '',
-        price: 0
+        price: 0,
+        productSearch: ''
       });
     }
     
     updateBillState(billId, {
       billItems: updatedItems,
-      activeRow: updatedItems.length - 1,
+      activeRow: Math.min(index, updatedItems.length - 1),
       activeField: 'productSearch'
     });
   };
@@ -337,12 +362,14 @@ const selectProduct = (billId, product, index) => {
         quantity: '', 
         productName: '', 
         productNameTamil: '',
-        price: 0
+        price: 0,
+        productSearch: ''
       }],
       activeRow: 0,
       activeField: 'productSearch',
       customerName: '',
-      mobileNumber: ''
+      mobileNumber: '',
+      productSearch: ''
     });
   };
 
@@ -704,7 +731,8 @@ const selectProduct = (billId, product, index) => {
       }, 200);
     };
   };
-const editBill = (bill) => {
+
+  const editBill = (bill) => {
     const newBill = {
       id: Date.now(),
       customerName: bill.customerName,
@@ -726,7 +754,7 @@ const editBill = (bill) => {
     
     setOpenBills([...openBills, newBill]);
     setTabIndex(openBills.length);
-};
+  };
 
   return (
     <div className="container mt-4">
@@ -767,7 +795,7 @@ const editBill = (bill) => {
                 updateBillState={updateBillState}
                 onCustomerNameChange={(value) => updateBillState(bill.id, { customerName: value })}
                 onMobileNumberChange={(value) => updateBillState(bill.id, { mobileNumber: value })}
-                onProductSearch={(value) => handleProductSearch(bill.id, value)}
+                onProductSearch={(value, index) => handleProductSearch(bill.id, value, index)}
                 onSelectProduct={(product, index) => selectProduct(bill.id, product, index)}
                 onRemoveItem={(index) => removeBillItem(bill.id, index)}
                 onPrint={() => handlePrint(bill.id)}
@@ -779,7 +807,6 @@ const editBill = (bill) => {
                 customerNameRefs={customerNameRefs}
                 mobileNumberRefs={mobileNumberRefs}
                 dropdownRefs={dropdownRefs}
-                productDropdownRefs={productDropdownRefs}
                 calculateTotal={() => calculateTotal(bill)}
               />
             </TabPanel>
@@ -912,7 +939,6 @@ const BillForm = ({
   customerNameRefs,
   mobileNumberRefs,
   dropdownRefs,
-  productDropdownRefs,
   calculateTotal
 }) => {
   const [showContactDropdown, setShowContactDropdown] = useState(false);
@@ -1064,19 +1090,19 @@ const BillForm = ({
                     <input
                       type="text"
                       className="form-control form-control-sm"
-                      value={item.productId ? item.productName : bill.productSearch}
-                      onChange={(e) => onProductSearch(e.target.value)}
+                      value={item.productId ? item.productName : (item.productSearch || '')}
+                      onChange={(e) => onProductSearch(e.target.value, index)}
                       onKeyDown={(e) => onProductKeyDown(e, index)}
                       onFocus={() => {
                         if (!item.productId) {
-                          onProductSearch('');
+                          onProductSearch('', index);
                         }
                       }}
                       ref={(el) => (productSearchRefs.current[index] = el)}
                       placeholder="Search product..."
                     />
-                    {bill.showProductDropdown && (
-                      <div className="card position-absolute w-100" style={{ zIndex: 1000 }} ref={productDropdownRefs}>
+                    {bill.showProductDropdown && bill.activeRow === index && (
+                      <div className="card position-absolute w-100" style={{ zIndex: 1000 }}>
                         <div className="card-body p-2">
                           <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                             {filteredProducts.length > 0 ? (
