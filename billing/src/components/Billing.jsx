@@ -26,24 +26,46 @@ class ErrorBoundary extends React.Component {
 
 const Billing = () => {
   // State for active tabs
-  const [tabIndex, setTabIndex] = useState(0);
-  const [openBills, setOpenBills] = useState([{ 
-    id: Date.now(),
-    customerName: '',
-    mobileNumber: '',
-    billItems: [{ 
-      productId: '', 
-      quantity: '', 
-      productName: '', 
-      productNameTamil: '',
-      price: 0
-    }],
-    activeRow: 0,
-    activeField: 'productSearch',
-    productSearch: '',
-    showProductDropdown: false,
-    isPrinting: false
-  }]);
+  const [openBills, setOpenBills] = useState(() => {
+    try {
+      const savedBills = localStorage.getItem('billing_openBills_v1');
+      if (savedBills) {
+        const parsed = JSON.parse(savedBills);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse saved bills from localStorage:', e);
+    }
+    return [{
+      id: Date.now(),
+      customerName: '',
+      mobileNumber: '',
+      billItems: [{
+        productId: '',
+        quantity: '',
+        productName: '',
+        productNameTamil: '',
+        price: 0
+      }],
+      activeRow: 0,
+      activeField: 'productSearch',
+      productSearch: '',
+      showProductDropdown: false,
+      isPrinting: false
+    }];
+  });
+  const [tabIndex, setTabIndex] = useState(() => {
+    try {
+      const savedTabIndex = localStorage.getItem('billing_tabIndex_v1');
+      if (savedTabIndex !== null) {
+        const idx = parseInt(savedTabIndex, 10);
+        if (!isNaN(idx)) return idx;
+      }
+    } catch (e) {
+      console.error('Failed to parse saved tab index from localStorage:', e);
+    }
+    return 0;
+  });
   
   // State for bill history
   const [billHistory, setBillHistory] = useState([]);
@@ -67,6 +89,35 @@ const Billing = () => {
   const customerNameRefs = useRef(null);
   const mobileNumberRefs = useRef(null);
   const dropdownRefs = useRef(null);
+
+  // Persist bill tabs across navigation using localStorage
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('billing_openBills_v1', JSON.stringify(openBills));
+      localStorage.setItem('billing_tabIndex_v1', String(tabIndex));
+    } catch (e) {
+      console.error('Failed to persist bill state:', e);
+    }
+  }, [openBills, tabIndex]);
+
+  // Add F2 key listener for printing
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        const activeBill = openBills[tabIndex];
+        if (activeBill) {
+          handlePrint(activeBill.id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openBills, tabIndex]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -374,6 +425,13 @@ const Billing = () => {
   };
 
   const handlePrint = async (billId) => {
+    // Set isPrinting to true before starting the print process
+    updateBillState(billId, { isPrinting: true });
+    
+    // Small delay to allow state to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
     const bill = openBills.find(b => b.id === billId);
     const validItems = bill.billItems
       .filter(item => item.productId && item.quantity)
@@ -385,16 +443,19 @@ const Billing = () => {
 
     if (validItems.length === 0) {
       alert('Please add items to the bill before printing');
+      updateBillState(billId, { isPrinting: false });
       return;
     }
 
     if (!bill.customerName || !bill.mobileNumber) {
       alert('Please enter customer name and mobile number');
+      updateBillState(billId, { isPrinting: false });
       return;
     }
 
     if (!/^\d{10}$/.test(bill.mobileNumber)) {
       alert('Mobile number must be 10 digits');
+      updateBillState(billId, { isPrinting: false });
       return;
     }
 
@@ -571,7 +632,6 @@ const Billing = () => {
           printWindow.print();
           printWindow.close();
           updateBillState(billId, { isPrinting: false });
-          resetForm(billId);
         }, 200);
       };
     } catch (err) {
@@ -579,18 +639,30 @@ const Billing = () => {
       alert(`Error: ${err.message}`);
       updateBillState(billId, { isPrinting: false });
     }
+    } catch (err) {
+      console.error('Unexpected error in handlePrint:', err);
+      alert(`Error: ${err.message}`);
+      updateBillState(billId, { isPrinting: false });
+    } finally {
+      // Ensure printing state is reset
+      updateBillState(billId, { isPrinting: false });
+    }
+
   };
 
   const reprintBill = async (bill) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Popup was blocked. Please allow popups for this site.');
-      return;
-    }
+    try {
+      // Set printing state to true
+      updateBillState(bill.id, { isPrinting: true });
+      
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        throw new Error('Popup was blocked. Please allow popups for this site.');
+      }
 
-    const now = new Date();
-    const date = now.toLocaleDateString('ta-IN');
-    const time = now.toLocaleTimeString('ta-IN');
+      const now = new Date();
+      const date = now.toLocaleDateString('ta-IN');
+      const time = now.toLocaleTimeString('ta-IN');
 
     const billContent = `
       <!DOCTYPE html>
@@ -720,16 +792,47 @@ const Billing = () => {
       </html>
     `;
 
-    printWindow.document.open();
-    printWindow.document.write(billContent);
-    printWindow.document.close();
+      printWindow.document.open();
+      printWindow.document.write(billContent);
+      printWindow.document.close();
 
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 200);
-    };
+      await new Promise((resolve, reject) => {
+        printWindow.onload = () => {
+          try {
+            setTimeout(() => {
+              printWindow.print();
+              printWindow.close();
+              resolve();
+            }, 200);
+          } catch (err) {
+            printWindow.close();
+            reject(err);
+          }
+        };
+        
+        // Fallback in case onload doesn't fire
+        setTimeout(() => {
+          if (!printWindow.closed) {
+            try {
+              printWindow.print();
+              printWindow.close();
+              resolve();
+            } catch (err) {
+              printWindow.close();
+              reject(err);
+            }
+          }
+        }, 1000);
+      });
+    } catch (err) {
+      console.error('Error in reprintBill:', err);
+      alert(`Error reprinting bill: ${err.message}`);
+    } finally {
+      // Ensure we always reset the printing state
+      if (bill?.id) {
+        updateBillState(bill.id, { isPrinting: false });
+      }
+    }
   };
 
   const editBill = (bill) => {
