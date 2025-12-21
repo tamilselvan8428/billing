@@ -102,23 +102,32 @@ const Billing = () => {
   }, [openBills, tabIndex]);
 
   // Add F2 key listener for printing
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        const activeBill = openBills[tabIndex];
-        if (activeBill) {
-          handlePrint(activeBill.id);
-        }
+// Add this inside the Billing component, in the existing useEffect hook for keydown events
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    const activeBill = openBills[tabIndex];
+    if (!activeBill) return;
+
+    if (e.key === 'F2') {
+      e.preventDefault();
+      handlePrint(activeBill.id);
+    } else if (e.key === 'F3') {
+      e.preventDefault();
+      // Check if there are items in the bill before printing
+      const hasItems = activeBill.billItems.some(item => item.productId && item.quantity);
+      if (hasItems) {
+        handlePrint(activeBill.id);
+      } else {
+        alert('Please add items to the bill before printing');
       }
-    };
+    }
+  };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openBills, tabIndex]);
-
+  window.addEventListener('keydown', handleKeyDown);
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+  };
+}, [openBills, tabIndex]);
   useEffect(() => {
     const fetchProducts = async () => {
       try {
