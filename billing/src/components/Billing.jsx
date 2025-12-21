@@ -102,22 +102,47 @@ const Billing = () => {
   }, [openBills, tabIndex]);
 
   // Add F2 key listener for printing
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'F2') {
+// Global keyboard shortcuts
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    const activeBill = openBills[tabIndex];
+    if (!activeBill) return;
+
+    switch (e.key) {
+      case 'F2':
+      case 'F3': // PRINT BILL
         e.preventDefault();
-        const activeBill = openBills[tabIndex];
-        if (activeBill) {
+        if (!activeBill.isPrinting) {
           handlePrint(activeBill.id);
         }
-      }
-    };
+        break;
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openBills, tabIndex]);
+      case 'F4': // NEW BILL
+        e.preventDefault();
+        createNewBill();
+        break;
+
+      case 'F6': // CLEAR BILL
+        e.preventDefault();
+        resetForm(activeBill.id);
+        break;
+
+      case 'Escape': // CLOSE DROPDOWNS
+        e.preventDefault();
+        updateBillState(activeBill.id, {
+          showProductDropdown: false
+        });
+        break;
+
+      default:
+        break;
+    }
+  };
+
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, [openBills, tabIndex]);
+
 
   useEffect(() => {
     const fetchProducts = async () => {
