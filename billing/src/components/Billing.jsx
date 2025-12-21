@@ -102,32 +102,23 @@ const Billing = () => {
   }, [openBills, tabIndex]);
 
   // Add F2 key listener for printing
-// Add this inside the Billing component, in the existing useEffect hook for keydown events
-useEffect(() => {
-  const handleKeyDown = (e) => {
-    const activeBill = openBills[tabIndex];
-    if (!activeBill) return;
-
-    if (e.key === 'F2') {
-      e.preventDefault();
-      handlePrint(activeBill.id);
-    } else if (e.key === 'F3') {
-      e.preventDefault();
-      // Check if there are items in the bill before printing
-      const hasItems = activeBill.billItems.some(item => item.productId && item.quantity);
-      if (hasItems) {
-        handlePrint(activeBill.id);
-      } else {
-        alert('Please add items to the bill before printing');
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        const activeBill = openBills[tabIndex];
+        if (activeBill) {
+          handlePrint(activeBill.id);
+        }
       }
-    }
-  };
+    };
 
-  window.addEventListener('keydown', handleKeyDown);
-  return () => {
-    window.removeEventListener('keydown', handleKeyDown);
-  };
-}, [openBills, tabIndex]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openBills, tabIndex]);
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -433,14 +424,14 @@ useEffect(() => {
     });
   };
 
-const handlePrint = async (billId) => {
-  // Set isPrinting to true before starting the print process
-  updateBillState(billId, { isPrinting: true });
-  
-  // Small delay to allow state to update
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  try {
+  const handlePrint = async (billId) => {
+    // Set isPrinting to true before starting the print process
+    updateBillState(billId, { isPrinting: true });
+    
+    // Small delay to allow state to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
     const bill = openBills.find(b => b.id === billId);
     const validItems = bill.billItems
       .filter(item => item.productId && item.quantity)
@@ -470,111 +461,194 @@ const handlePrint = async (billId) => {
 
     updateBillState(billId, { isPrinting: true });
 
-    const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        items: validItems,
-        customerName: bill.customerName,
-        mobileNumber: bill.mobileNumber
-      }),
-    });
+    try {
+      const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          items: validItems,
+          customerName: bill.customerName,
+          mobileNumber: bill.mobileNumber
+        }),
+      });
 
-    const responseData = await response.json();
+      const responseData = await response.json();
 
-    if (!response.ok) {
-      throw new Error(responseData.message || 'Failed to create bill');
-    }
-
-    const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
-    setProducts(await productsResponse.json());
-    await fetchBillHistory();
-
-    const now = new Date();
-    const date = now.toLocaleDateString('ta-IN');
-    const time = now.toLocaleTimeString('ta-IN');
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Popup was blocked. Please allow popups for this site.');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
-
-    const validBillItems = bill.billItems.filter(item => item.productId && item.quantity);
-
-    const billContent = `
-      <!DOCTYPE html>
-      <html>
-        <!-- Rest of the bill HTML content remains the same -->
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(billContent);
-    printWindow.document.close();
-
-    // Variable to track if print was completed
-    let printCompleted = false;
-    
-    // Function to handle after print is done
-    const handleAfterPrint = () => {
-      if (!printCompleted) {
-        printCompleted = true;
-        printWindow.close();
-        updateBillState(billId, { isPrinting: false });
-        // Clear the bill after successful print
-        resetForm(billId);
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Failed to create bill');
       }
-    };
 
-    // Add event listener for print dialog close/cancel
-    printWindow.onbeforeunload = () => {
-      if (!printCompleted) {
+      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
+      setProducts(await productsResponse.json());
+      await fetchBillHistory();
+
+      const now = new Date();
+      const date = now.toLocaleDateString('ta-IN');
+      const time = now.toLocaleTimeString('ta-IN');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Popup was blocked. Please allow popups for this site.');
         updateBillState(billId, { isPrinting: false });
+        return;
       }
-      return null;
-    };
 
-    // Add afterprint event
-    printWindow.onafterprint = handleAfterPrint;
+      const validBillItems = bill.billItems.filter(item => item.productId && item.quantity);
 
-    // Small delay before printing to ensure content is loaded
-    setTimeout(() => {
-      try {
-        // Trigger print
-        const printResult = printWindow.print();
-        
-        // For browsers that support Promise-based print()
-        if (printResult && printResult.then) {
-          printResult
-            .then(() => {
-              if (!printCompleted) {
-                handleAfterPrint();
+      const billContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>ராஜா ஸ்னாக்ஸ் பில்</title>
+            <meta charset="UTF-8">
+            <style>
+              @page { size: 80mm auto; margin: 0; }
+              body { 
+                width: 80mm;
+                margin: 0;
+                padding: 2mm;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.2;
               }
-            })
-            .catch(() => {
-              if (!printCompleted) {
-                printWindow.close();
-                updateBillState(billId, { isPrinting: false });
+              .header { 
+                text-align: center; 
+                margin-bottom: 2mm; 
               }
-            });
-        }
-      } catch (err) {
-        console.error('Error during print:', err);
-        if (!printCompleted) {
+              .shop-name { 
+                font-weight: bold; 
+                font-size: 16px; 
+                margin: 0; 
+              }
+              .bill-title { 
+                font-weight: bold; 
+                font-size: 15px; 
+                margin: 1px 0; 
+              }
+              .contact { 
+                font-size: 12px; 
+                margin: 1px 0 2px 0; 
+              }
+              .customer-info { 
+                margin-bottom: 2mm;
+                display: flex;
+                justify-content: space-between;
+              }
+              .customer-details {
+                text-align: left;
+              }
+              .date-time {
+                text-align: right;
+              }
+              table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 2mm; 
+              }
+              th, td { 
+                padding: 2mm 0; 
+                text-align: left; 
+              }
+              th { 
+                border-bottom: 1px dashed #000; 
+              }
+              .item-row td { 
+                border-bottom: 1px dashed #ddd; 
+                padding: 2mm 0; 
+              }
+              .total-row { 
+                font-weight: bold; 
+                border-top: 1px dashed #000; 
+                border-bottom: 1px dashed #000; 
+              }
+              .footer { 
+                text-align: center; 
+                margin-top: 2mm; 
+                font-size: 12px; 
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
+              <p class="bill-title">கேஷ் பில்</p>
+              <p class="contact">தொலைபேசி: 9842263860</p>
+            </div>
+            
+            <div class="customer-info">
+              <div class="customer-details">
+                <div>வாடிக்கையாளர்: ${bill.customerName}</div>
+                <div>அலைபேசி: ${bill.mobileNumber}</div>
+              </div>
+              <div class="date-time">
+                <div>தேதி: ${date}</div>
+                <div>நேரம்: ${time}</div>
+              </div>
+            </div>
+            
+            <table>
+              <thead>
+                <tr>
+                  <th width="10%">#</th>
+                  <th width="40%">பொருள்</th>
+                  <th width="15%">அளவு</th>
+                  <th width="15%">விலை</th>
+                  <th width="20%">மொத்தம்</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${validBillItems.map((item, idx) => `
+                  <tr class="item-row">
+                    <td>${idx + 1}</td>
+                    <td>${item.productNameTamil || '-'}</td>
+                    <td>${item.quantity}</td>
+                    <td>₹${(item.price || 0).toFixed(2)}</td>
+                    <td>₹${((item.price || 0) * parseInt(item.quantity || 0)).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            
+            <table>
+              <tr class="total-row">
+                <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
+                <td>₹${calculateTotal(bill).toFixed(2)}</td>
+              </tr>
+            </table>
+            
+            <div class="footer">
+              <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.open();
+      printWindow.document.write(billContent);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
           printWindow.close();
           updateBillState(billId, { isPrinting: false });
-        }
-      }
-    }, 500);
+        }, 200);
+      };
+    } catch (err) {
+      console.error('Error creating bill:', err);
+      alert(`Error: ${err.message}`);
+      updateBillState(billId, { isPrinting: false });
+    }
+    } catch (err) {
+      console.error('Unexpected error in handlePrint:', err);
+      alert(`Error: ${err.message}`);
+      updateBillState(billId, { isPrinting: false });
+    } finally {
+      // Ensure printing state is reset
+      updateBillState(billId, { isPrinting: false });
+    }
 
-  } catch (err) {
-    console.error('Error in handlePrint:', err);
-    alert(`Error: ${err.message}`);
-    updateBillState(billId, { isPrinting: false });
-  }
-};
+  };
 
   const reprintBill = async (bill) => {
     try {
