@@ -371,6 +371,39 @@ const handleBulkUpdate = async () => {
     setTimeout(() => setError(null), 5000);
   }
 };
+  const handleDeleteProduct = async (productId) => {
+    if (!window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`https://billing-server-gaha.onrender.com/api/products/${productId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete product');
+      }
+
+      // Refresh the product list
+      await fetchProducts();
+      
+      setSuccessMessage('Product deleted successfully');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+    } catch (err) {
+      console.error('Delete product error:', err);
+      setError(err.message || 'Failed to delete product');
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
   const resetStockForm = () => {
     setStockEntries([{ 
       productName: '', 
@@ -729,10 +762,16 @@ const handleBulkUpdate = async () => {
                     <td>{product.minStockLevel}</td>
                     <td>
                       <button 
-                        className="btn btn-sm btn-info"
+                        className="btn btn-sm btn-info me-2"
                         onClick={() => loadProductForEdit(product)}
                       >
                         Edit
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDeleteProduct(product._id)}
+                      >
+                        Delete
                       </button>
                     </td>
                   </tr>
