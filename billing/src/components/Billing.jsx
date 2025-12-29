@@ -303,37 +303,62 @@ useEffect(() => {
 
   const handleProductKeyDown = (billId, e, index) => {
     const bill = openBills.find(b => b.id === billId);
-    
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (filteredProducts.length === 1) {
-        selectProduct(billId, filteredProducts[0], index);
-      } else {
-        updateBillState(billId, { 
-          activeField: 'quantity',
-          activeRow: index
-        });
-        setTimeout(() => {
-          if (quantityRefs.current[index]) {
-            quantityRefs.current[index].focus();
+    const currentItem = bill.billItems[index];
+
+    switch (e.key) {
+      case 'Enter':
+        e.preventDefault();
+        if (bill.showProductDropdown && filteredProducts.length > 0) {
+          const firstProduct = filteredProducts[0];
+          selectProduct(billId, firstProduct, index);
+        } else if (currentItem.productId && currentItem.quantity) {
+          // If product is already selected and quantity is entered, move to next row
+          const nextIndex = Math.min(index + 1, bill.billItems.length - 1);
+          updateBillState(billId, { 
+            activeRow: nextIndex,
+            activeField: 'productSearch',
+            showProductDropdown: false
+          });
+          if (productSearchRefs.current[nextIndex]) {
+            productSearchRefs.current[nextIndex].focus();
           }
-        }, 0);
-      }
-    } else if (e.key === 'ArrowDown' && bill.showProductDropdown) {
-      e.preventDefault();
-      const firstItem = document.querySelector(`.product-item-${index}`);
-      if (firstItem) firstItem.focus();
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      updateBillState(billId, { 
-        activeField: 'quantity',
-        activeRow: index
-      });
-    } else if (e.key === 'Backspace' && bill.billItems[index].productSearch === '' && e.target.selectionStart === 0) {
-      e.preventDefault();
-      if (bill.billItems.length > 1) {
-        removeBillItem(billId, index);
-      }
+        } else if (quantityRefs.current[index]) {
+          quantityRefs.current[index].focus();
+        }
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        if (!bill.showProductDropdown && filteredProducts.length > 0) {
+          updateBillState(billId, { showProductDropdown: true });
+        }
+        if (filteredProducts.length > 0) {
+          const firstItem = document.querySelector(`.product-item-${index}`);
+          if (firstItem) {
+            firstItem.focus();
+            // Prevent scrolling the page
+            e.stopPropagation();
+          }
+        }
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (document.activeElement.classList.contains('product-item')) {
+          // If we're on a product item, move focus back to search input
+          if (productSearchRefs.current[index]) {
+            productSearchRefs.current[index].focus();
+          }
+        }
+        e.stopPropagation();
+        break;
+      case 'Escape':
+        updateBillState(billId, { showProductDropdown: false });
+        e.stopPropagation();
+        break;
+      case 'Tab':
+        updateBillState(billId, { showProductDropdown: false });
+        break;
+      default:
+        break;
     }
   };
 
@@ -450,10 +475,7 @@ useEffect(() => {
   };
 
   const handlePrint = async (billId) => {
-    // Set isPrinting to true before starting the print process
     updateBillState(billId, { isPrinting: true });
-    
-    // Small delay to allow state to update
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
@@ -617,8 +639,8 @@ useEffect(() => {
                   <th width="10%">#</th>
                   <th width="40%">பொருள்</th>
                   <th width="15%">அளவு</th>
-                  <th width="15%">விலை</th>
-                  <th width="20%">மொத்தம்</th>
+                  <th width="20%" style="padding-right: 10px;">விலை</th>
+                  <th width="15%">மொத்தம்</th>
                 </tr>
               </thead>
               <tbody>
@@ -627,7 +649,7 @@ useEffect(() => {
                     <td>${idx + 1}</td>
                     <td>${item.productNameTamil || '-'}</td>
                     <td>${item.quantity}</td>
-                    <td>₹${(item.price || 0).toFixed(2)}</td>
+                    <td style="padding-right: 10px;">₹${(item.price || 0).toFixed(2)}</td>
                     <td>₹${((item.price || 0) * parseInt(item.quantity || 0)).toFixed(2)}</td>
                   </tr>
                 `).join('')}
@@ -656,7 +678,23 @@ useEffect(() => {
         setTimeout(() => {
           printWindow.print();
           printWindow.close();
-          updateBillState(billId, { isPrinting: false });
+          updateBillState(billId, {
+            isPrinting: false,
+            billItems: [{ 
+              productId: '', 
+              quantity: '', 
+              productName: '', 
+              productNameTamil: '',
+              price: 0,
+              productSearch: ''
+            }],
+            customerName: '',
+            mobileNumber: '',
+            activeRow: 0,
+            activeField: 'productSearch',
+            productSearch: '',
+            showProductDropdown: false
+          });
         }, 200);
       };
     } catch (err) {
