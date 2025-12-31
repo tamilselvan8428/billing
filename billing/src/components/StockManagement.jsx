@@ -134,6 +134,26 @@ const StockManagement = () => {
     setStockEntries(updatedEntries);
   };
 
+  const clearRow = (index) => {
+    const updatedEntries = [...stockEntries];
+    updatedEntries[index] = { 
+      productName: '', 
+      productNameTamil: '',
+      currentStock: 0,
+      newQuantity: '',
+      productSearch: '' 
+    };
+    setStockEntries(updatedEntries);
+    // Set focus back to the product search field
+    setActiveRow(index);
+    setActiveField('productSearch');
+    setTimeout(() => {
+      if (productSearchRefs.current[index]) {
+        productSearchRefs.current[index].focus();
+      }
+    }, 0);
+  };
+
   const handleProductKeyDown = (e, index) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -573,13 +593,25 @@ const handleBulkUpdate = async () => {
                       />
                     </td>
                     <td>
-                      <button 
-                        className="btn btn-sm btn-primary"
-                        onClick={() => handleUpdateStock(index)}
-                        disabled={!entry.productName || !entry.newQuantity || isNaN(entry.newQuantity)}
-                      >
-                        Update
-                      </button>
+                      <div className="d-flex gap-1">
+                        <button 
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleUpdateStock(index)}
+                          disabled={!entry.productName || !entry.newQuantity || isNaN(entry.newQuantity)}
+                        >
+                          Update
+                        </button>
+                        <button 
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearRow(index);
+                          }}
+                          title="Clear row"
+                        >
+                          <i className="bi bi-x-lg"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
