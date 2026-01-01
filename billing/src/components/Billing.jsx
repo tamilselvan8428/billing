@@ -1124,6 +1124,7 @@ const BillForm = ({
 }) => {
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
+  const dropdownContainerRef = useRef(null);
 
   const filteredContacts = savedContacts.filter(contact => 
     contact?.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
@@ -1143,11 +1144,24 @@ const BillForm = ({
       if (mobileNumberRefs.current) {
         mobileNumberRefs.current.focus();
       }
-    } else if (e.key === 'ArrowDown' && showContactDropdown && filteredContacts.length > 0) {
+    } else if (e.key === 'ArrowDown' && filteredContacts.length > 0) {
       e.preventDefault();
+      setShowContactDropdown(true);
       const firstItem = document.querySelector('.contact-item');
       if (firstItem) firstItem.focus();
+    } else if (e.key === 'Escape') {
+      setShowContactDropdown(false);
     }
+  };
+
+  const handleCustomerNameBlur = (e) => {
+    // Use setTimeout to allow click events on dropdown items to fire first
+    setTimeout(() => {
+      // Check if the newly focused element is not inside our dropdown
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(document.activeElement)) {
+        setShowContactDropdown(false);
+      }
+    }, 200);
   };
 
   const handleMobileNumberKeyDown = (e) => {
@@ -1175,14 +1189,17 @@ const BillForm = ({
               onChange={(e) => {
                 onCustomerNameChange(e.target.value);
                 setContactSearch(e.target.value);
-                setShowContactDropdown(e.target.value.length > 0);
+                setShowContactDropdown(true);
               }}
               onKeyDown={handleCustomerNameKeyDown}
+              onBlur={handleCustomerNameBlur}
+              onFocus={() => setShowContactDropdown(true)}
               ref={customerNameRefs}
               placeholder="Type customer name"
+              autoComplete="off"
             />
             {showContactDropdown && (
-              <div className="card position-absolute w-100" style={{ zIndex: 1000 }} ref={dropdownRefs}>
+              <div className="card position-absolute w-100" style={{ zIndex: 1000 }} ref={dropdownContainerRef}>
                 <div className="card-body p-2">
                   <input
                     type="text"
@@ -1190,6 +1207,13 @@ const BillForm = ({
                     placeholder="Search contacts..."
                     value={contactSearch}
                     onChange={(e) => setContactSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setShowContactDropdown(false);
+                        customerNameRefs.current.focus();
+                      }
+                    }}
+                    autoFocus
                   />
                   <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                     {filteredContacts.length > 0 ? (
