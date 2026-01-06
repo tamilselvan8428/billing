@@ -38,14 +38,13 @@ const Billing = () => {
     }
     return [{
       id: Date.now(),
-      customerName: '',
-      mobileNumber: '',
       billItems: [{
         productId: '',
         quantity: '',
         productName: '',
         productNameTamil: '',
-        price: 0
+        price: 0,
+        productSearch: ''
       }],
       activeRow: 0,
       activeField: 'productSearch',
@@ -78,7 +77,6 @@ const Billing = () => {
   
   // Shared state
   const [products, setProducts] = useState([]);
-  const [savedContacts, setSavedContacts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [error, setError] = useState(null);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -86,8 +84,6 @@ const Billing = () => {
 
   const productSearchRefs = useRef([]);
   const quantityRefs = useRef([]);
-  const customerNameRefs = useRef(null);
-  const mobileNumberRefs = useRef(null);
   const dropdownRefs = useRef(null);
 
   // Persist bill tabs across navigation using localStorage
@@ -161,25 +157,12 @@ useEffect(() => {
     };
 
     fetchProducts();
-    loadSavedContacts();
     fetchBillHistory();
   }, []);
 
   useEffect(() => {
     fetchBillHistory();
   }, [dateFilter]);
-
-  const loadSavedContacts = async () => {
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/contacts');
-      if (response.ok) {
-        const data = await response.json();
-        setSavedContacts(data.contacts || []);
-      }
-    } catch (err) {
-      console.error('Error loading contacts:', err);
-    }
-  };
 
   const fetchBillHistory = async () => {
     try {
@@ -213,14 +196,13 @@ useEffect(() => {
   const createNewBill = () => {
     const newBill = { 
       id: Date.now(),
-      customerName: '',
-      mobileNumber: '',
       billItems: [{ 
         productId: '', 
         quantity: '', 
         productName: '', 
         productNameTamil: '',
-        price: 0
+        price: 0,
+        productSearch: ''
       }],
       activeRow: 0,
       activeField: 'productSearch',
@@ -458,485 +440,126 @@ useEffect(() => {
 
   const resetForm = (billId) => {
     updateBillState(billId, {
-      billItems: [{ 
-        productId: '', 
-        quantity: '', 
-        productName: '', 
-        productNameTamil: '',
-        price: 0,
-        productSearch: ''
-      }],
+      billItems: [{ productId: '', quantity: '', productName: '', productNameTamil: '', price: 0, productSearch: '' }],
       activeRow: 0,
       activeField: 'productSearch',
-      customerName: '',
-      mobileNumber: '',
-      productSearch: ''
+      productSearch: '',
+      showProductDropdown: false
     });
   };
 
-  const handlePrint = async (billId) => {
-    updateBillState(billId, { isPrinting: true });
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-    const bill = openBills.find(b => b.id === billId);
-    const validItems = bill.billItems
-      .filter(item => item.productId && item.quantity)
-      .map(item => ({
-        productId: item.productId,
-        quantity: parseInt(item.quantity || 0),
-        price: parseFloat(item.price || 0)
-      }));
-
-    if (validItems.length === 0) {
-      alert('Please add items to the bill before printing');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
-
-    if (!bill.customerName || !bill.mobileNumber) {
-      alert('Please enter customer name and mobile number');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
-
-    if (!/^\d{10}$/.test(bill.mobileNumber)) {
-      alert('Mobile number must be 10 digits');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
-
-    updateBillState(billId, { isPrinting: true });
-
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          items: validItems,
-          customerName: bill.customerName,
-          mobileNumber: bill.mobileNumber
-        }),
-      });
-
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new Error(responseData.message || 'Failed to create bill');
-      }
-
-      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
-      setProducts(await productsResponse.json());
-      await fetchBillHistory();
-
-      const now = new Date();
-      const date = now.toLocaleDateString('ta-IN');
-      const time = now.toLocaleTimeString('ta-IN');
-
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('Popup was blocked. Please allow popups for this site.');
-        updateBillState(billId, { isPrinting: false });
-        return;
-      }
-
-      const validBillItems = bill.billItems.filter(item => item.productId && item.quantity);
-
-      const billContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>ராஜா ஸ்னாக்ஸ் பில்</title>
-            <meta charset="UTF-8">
-            <style>
-              @page { size: 80mm auto; margin: 0; }
-              body { 
-                width: 80mm;
-                margin: 0;
-                padding: 2mm;
-                font-family: Arial, sans-serif;
-                font-size: 14px;
-                line-height: 1.2;
-              }
-              .header { 
-                text-align: center; 
-                margin-bottom: 2mm; 
-              }
-              .shop-name { 
-                font-weight: bold; 
-                font-size: 16px; 
-                margin: 0; 
-              }
-              .bill-title { 
-                font-weight: bold; 
-                font-size: 15px; 
-                margin: 1px 0; 
-              }
-              .contact { 
-                font-size: 12px; 
-                margin: 1px 0 2px 0; 
-              }
-              .customer-info { 
-                margin-bottom: 2mm;
-                display: flex;
-                justify-content: space-between;
-              }
-              .customer-details {
-                text-align: left;
-              }
-              .date-time {
-                text-align: right;
-              }
-              table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                margin-bottom: 2mm; 
-              }
-              th, td { 
-                padding: 2mm 0; 
-                text-align: left; 
-              }
-              th { 
-                border-bottom: 1px dashed #000; 
-              }
-              .item-row td { 
-                border-bottom: 1px dashed #ddd; 
-                padding: 2mm 0; 
-              }
-              .total-row { 
-                font-weight: bold; 
-                border-top: 1px dashed #000; 
-                border-bottom: 1px dashed #000; 
-              }
-              .footer { 
-                text-align: center; 
-                margin-top: 2mm; 
-                font-size: 12px; 
-              }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
-              <p class="bill-title">கேஷ் பில்</p>
-              <p class="contact">தொலைபேசி: 9842263860</p>
-            </div>
-            
-            <div class="customer-info">
-              <div class="customer-details">
-                <div>வாடிக்கையாளர்: ${bill.customerName}</div>
-                <div>அலைபேசி: ${bill.mobileNumber}</div>
-              </div>
-              <div class="date-time">
-                <div>தேதி: ${date}</div>
-                <div>நேரம்: ${time}</div>
-              </div>
-            </div>
-            
-            <table>
-              <thead>
-                <tr>
-                  <th width="10%">#</th>
-                  <th width="40%">பொருள்</th>
-                  <th width="15%">அளவு</th>
-                  <th width="20%" style="padding-right: 10px;">விலை</th>
-                  <th width="15%">மொத்தம்</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${validBillItems.map((item, idx) => `
-                  <tr class="item-row">
-                    <td>${idx + 1}</td>
-                    <td>${item.productNameTamil || '-'}</td>
-                    <td>${item.quantity}</td>
-                    <td style="padding-right: 10px;">₹${(item.price || 0).toFixed(2)}</td>
-                    <td>₹${((item.price || 0) * parseInt(item.quantity || 0)).toFixed(2)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            
-            <table>
-              <tr class="total-row">
-                <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-                <td>₹${calculateTotal(bill).toFixed(2)}</td>
-              </tr>
-            </table>
-            
-            <div class="footer">
-              <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
-            </div>
-          </body>
-        </html>
-      `;
-
-      printWindow.document.open();
-      printWindow.document.write(billContent);
-      printWindow.document.close();
-
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-          updateBillState(billId, {
-            isPrinting: false,
-            billItems: [{ 
-              productId: '', 
-              quantity: '', 
-              productName: '', 
-              productNameTamil: '',
-              price: 0,
-              productSearch: ''
-            }],
-            customerName: '',
-            mobileNumber: '',
-            activeRow: 0,
-            activeField: 'productSearch',
-            productSearch: '',
-            showProductDropdown: false
-          });
-        }, 200);
-      };
-    } catch (err) {
-      console.error('Error creating bill:', err);
-      alert(`Error: ${err.message}`);
-      updateBillState(billId, { isPrinting: false });
-    }
-    } catch (err) {
-      console.error('Unexpected error in handlePrint:', err);
-      alert(`Error: ${err.message}`);
-      updateBillState(billId, { isPrinting: false });
-    } finally {
-      // Ensure printing state is reset
-      updateBillState(billId, { isPrinting: false });
-    }
-
-  };
-
-  const reprintBill = async (bill) => {
-    try {
-      // Set printing state to true
-      updateBillState(bill.id, { isPrinting: true });
-      
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        throw new Error('Popup was blocked. Please allow popups for this site.');
-      }
-
-      const now = new Date();
-      const date = now.toLocaleDateString('ta-IN');
-      const time = now.toLocaleTimeString('ta-IN');
-
-    const billContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>ராஜா ஸ்னாக்ஸ் பில்</title>
-          <meta charset="UTF-8">
-          <style>
-            @page { size: 80mm auto; margin: 0; }
-            body { 
-              width: 80mm;
-              margin: 0;
-              padding: 2mm;
-              font-family: Arial, sans-serif;
-              font-size: 14px;
-              line-height: 1.2;
-            }
-            .header { 
-              text-align: center; 
-              margin-bottom: 2mm; 
-            }
-            .shop-name { 
-              font-weight: bold; 
-              font-size: 16px; 
-              margin: 0; 
-            }
-            .bill-title { 
-              font-weight: bold; 
-              font-size: 15px; 
-              margin: 1px 0; 
-            }
-            .contact { 
-              font-size: 12px; 
-              margin: 1px 0 2px 0; 
-            }
-            .customer-info { 
-              margin-bottom: 2mm;
-              display: flex;
-              justify-content: space-between;
-            }
-            .customer-details {
-              text-align: left;
-            }
-            .date-time {
-              text-align: right;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-bottom: 2mm; 
-            }
-            th, td { 
-              padding: 2mm 0; 
-              text-align: left; 
-            }
-            th { 
-              border-bottom: 1px dashed #000; 
-            }
-            .item-row td { 
-              border-bottom: 1px dashed #ddd; 
-              padding: 2mm 0; 
-            }
-            .total-row { 
-              font-weight: bold; 
-              border-top: 1px dashed #000; 
-              border-bottom: 1px dashed #000; 
-            }
-            .footer { 
-              text-align: center; 
-              margin-top: 2mm; 
-              font-size: 12px; 
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
-            <p class="bill-title">கேஷ் பில்</p>
-            <p class="contact">தொலைபேசி: 9842263860</p>
-          </div>
-          
-          <div class="customer-info">
-            <div class="customer-details">
-              <div>வாடிக்கையாளர்: ${bill.customerName}</div>
-              <div>அலைபேசி: ${bill.mobileNumber}</div>
-            </div>
-            <div class="date-time">
-              <div>தேதி: ${new Date(bill.createdAt).toLocaleDateString('ta-IN')}</div>
-              <div>நேரம்: ${new Date(bill.createdAt).toLocaleTimeString('ta-IN')}</div>
-            </div>
-          </div>
-          
-          <table>
+  const BillForm = ({ bill, products, filteredProducts, loadingProducts, error, updateBillState, onProductSearch, onSelectProduct, onRemoveItem, onPrint, onProductKeyDown, onQuantityKeyDown, onClearBill, productSearchRefs, quantityRefs, dropdownRefs, calculateTotal }) => {
+    return (
+      <div className="card">
+        <div className="card-body">
+          <table className="table table-striped">
             <thead>
               <tr>
-                <th width="10%">#</th>
-                <th width="40%">பொருள்</th>
-                <th width="15%">அளவு</th>
-                <th width="15%">விலை</th>
-                <th width="20%">மொத்தம்</th>
+                <th>Product</th>
+                <th>Tamil Name</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Total</th>
+                <th>Stock</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              ${bill.items.map((item, idx) => `
-                <tr class="item-row">
-                  <td>${idx + 1}</td>
-                  <td>${item.product?.nameTamil || '-'}</td>
-                  <td>${item.quantity}</td>
-                  <td>₹${(item.price || 0).toFixed(2)}</td>
-                  <td>₹${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</td>
+              {bill.billItems.map((item, index) => (
+                <tr key={index}>
+                  <td>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={item.productSearch}
+                      onChange={(e) => onProductSearch(e.target.value, index)}
+                      onKeyDown={(e) => onProductKeyDown(e, index)}
+                      ref={(el) => (productSearchRefs.current[index] = el)}
+                      placeholder="Search product"
+                    />
+                    {bill.showProductDropdown && filteredProducts.length > 0 && (
+                      <ul className="list-group">
+                        {filteredProducts.map((product, idx) => (
+                          <li
+                            key={idx}
+                            className={`list-group-item product-item-${index}`}
+                            onClick={() => onSelectProduct(product, index)}
+                          >
+                            <div className="d-flex justify-content-between">
+                              <span>{product.name}</span>
+                              <span className="text-muted">₹{(product.price || 0).toFixed(2)}</span>
+                            </div>
+                            <div className="text-muted small">{product.nameTamil}</div>
+                            <div className="text-muted small">Available: {product.stock || 0}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td>{item.productNameTamil || '-'}</td>
+                  <td>
+                    <input
+                      type="number"
+                      className="form-control form-control-sm"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const updatedItems = [...bill.billItems];
+                        updatedItems[index].quantity = e.target.value;
+                        updateBillState(bill.id, { billItems: updatedItems });
+                      }}
+                      onKeyDown={(e) => onQuantityKeyDown(e, index)}
+                      ref={(el) => (quantityRefs.current[index] = el)}
+                      min="1"
+                    />
+                  </td>
+                  <td>₹{(item.price || 0).toFixed(2)}</td>
+                  <td>₹{((item.price || 0) * (parseInt(item.quantity) || 0)).toFixed(2)}</td>
+                  <td>
+                    {item.productId ? (
+                      products.find(p => p._id === item.productId)?.stock || 0
+                    ) : '-'}
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => onRemoveItem(index)}
+                      disabled={bill.billItems.length === 1 && !bill.billItems[0].productId && !bill.billItems[0].quantity}
+                    >
+                      Remove
+                    </button>
+                  </td>
                 </tr>
-              `).join('')}
+              ))}
+              <tr>
+                <td colSpan="6" className="text-end"><strong>Grand Total:</strong></td>
+                <td colSpan="2"><strong>₹{calculateTotal().toFixed(2)}</strong></td>
+              </tr>
             </tbody>
           </table>
-          
-          <table>
-            <tr class="total-row">
-              <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-              <td>₹${(bill.totalAmount || 0).toFixed(2)}</td>
-            </tr>
-          </table>
-          
-          <div class="footer">
-            <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
+        </div>
+
+        <div className="d-flex justify-content-between no-print">
+          <button
+            className="btn btn-danger"
+            onClick={onClearBill}
+            disabled={bill.billItems.length === 1 && !bill.billItems[0].productId && !bill.billItems[0].quantity}
+          >
+            Clear Bill
+          </button>
+          <div>
+            <button
+              className="btn btn-primary"
+              onClick={onPrint}
+              disabled={bill.isPrinting || calculateTotal() === 0 || !bill.customerName || !bill.mobileNumber}
+            >
+              {bill.isPrinting ? 'Printing...' : 'Print Bill'}
+            </button>
           </div>
-        </body>
-      </html>
-    `;
-
-      printWindow.document.open();
-      printWindow.document.write(billContent);
-      printWindow.document.close();
-
-      await new Promise((resolve, reject) => {
-        printWindow.onload = () => {
-          try {
-            setTimeout(() => {
-              printWindow.print();
-              printWindow.close();
-              resolve();
-            }, 200);
-          } catch (err) {
-            printWindow.close();
-            reject(err);
-          }
-        };
-        
-        // Fallback in case onload doesn't fire
-        setTimeout(() => {
-          if (!printWindow.closed) {
-            try {
-              printWindow.print();
-              printWindow.close();
-              resolve();
-            } catch (err) {
-              printWindow.close();
-              reject(err);
-            }
-          }
-        }, 1000);
-      });
-    } catch (err) {
-      console.error('Error in reprintBill:', err);
-      alert(`Error reprinting bill: ${err.message}`);
-    } finally {
-      // Ensure we always reset the printing state
-      if (bill?.id) {
-        updateBillState(bill.id, { isPrinting: false });
-      }
-    }
+        </div>
+      </div>
+    );
   };
 
-const editBill = (bill) => {
-  const newBill = {
-    id: Date.now(),
-    customerName: bill.customerName,
-    mobileNumber: bill.mobileNumber,
-    billItems: bill.items.map(item => {
-      const product = products.find(p => p._id === item.productId);
-      const productName = product?.name || item.product?.name || '';
-      return {
-        productId: item.productId || '',
-        quantity: item.quantity.toString(),
-        productName: productName,
-        productNameTamil: product?.nameTamil || item.product?.nameTamil || '',
-        price: item.price || 0,
-        productSearch: productName // Set the search term to the product name
-      };
-    }),
-    activeRow: 0,
-    activeField: 'productSearch',
-    productSearch: '',
-    showProductDropdown: false,
-    isPrinting: false
-  };
-
-  // If no items, add an empty row
-  if (newBill.billItems.length === 0) {
-    newBill.billItems.push({
-      productId: '',
-      quantity: '',
-      productName: '',
-      productNameTamil: '',
-      price: 0,
-      productSearch: ''
-    });
-  }
-
-  setOpenBills([...openBills, newBill]);
-  setTabIndex(openBills.length);
-};
   return (
     <div className="container mt-4">
       <ErrorBoundary>
@@ -945,7 +568,7 @@ const editBill = (bill) => {
             {openBills.map((bill, index) => (
               <Tab key={bill.id}>
                 Bill {index + 1}
-                <button 
+                <button
                   className="ms-2 btn btn-sm btn-outline-danger"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -966,16 +589,13 @@ const editBill = (bill) => {
 
           {openBills.map((bill) => (
             <TabPanel key={bill.id}>
-              <BillForm 
+              <BillForm
                 bill={bill}
                 products={products}
                 filteredProducts={filteredProducts}
-                savedContacts={savedContacts}
                 loadingProducts={loadingProducts}
                 error={error}
                 updateBillState={updateBillState}
-                onCustomerNameChange={(value) => updateBillState(bill.id, { customerName: value })}
-                onMobileNumberChange={(value) => updateBillState(bill.id, { mobileNumber: value })}
                 onProductSearch={(value, index) => handleProductSearch(bill.id, value, index)}
                 onSelectProduct={(product, index) => selectProduct(bill.id, product, index)}
                 onRemoveItem={(index) => removeBillItem(bill.id, index)}
@@ -985,8 +605,6 @@ const editBill = (bill) => {
                 onClearBill={() => resetForm(bill.id)}
                 productSearchRefs={productSearchRefs}
                 quantityRefs={quantityRefs}
-                customerNameRefs={customerNameRefs}
-                mobileNumberRefs={mobileNumberRefs}
                 dropdownRefs={dropdownRefs}
                 calculateTotal={() => calculateTotal(bill)}
               />
@@ -994,21 +612,13 @@ const editBill = (bill) => {
           ))}
 
           <TabPanel>
-            <div className="text-center p-4">
-              <button className="btn btn-primary btn-lg" onClick={createNewBill}>
-                Create New Bill
-              </button>
-            </div>
-          </TabPanel>
-
-          <TabPanel>
             <div className="card">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h4>Bill History</h4>
                 <div>
-                  <input 
-                    type="date" 
-                    className="form-control" 
+                  <input
+                    type="date"
+                    className="form-control"
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
                   />
@@ -1018,7 +628,7 @@ const editBill = (bill) => {
                 {historyLoading ? (
                   <div className="text-center">Loading...</div>
                 ) : (
-                  <>
+                  <div>
                     <div className="row mb-4">
                       <div className="col-md-4">
                         <div className="card text-white bg-primary">
@@ -1052,8 +662,6 @@ const editBill = (bill) => {
                           <tr>
                             <th>Bill No</th>
                             <th>Date</th>
-                            <th>Customer</th>
-                            <th>Mobile</th>
                             <th>Items</th>
                             <th>Total</th>
                             <th>Actions</th>
@@ -1064,18 +672,16 @@ const editBill = (bill) => {
                             <tr key={bill._id}>
                               <td>{bill.billNumber}</td>
                               <td>{new Date(bill.createdAt).toLocaleString()}</td>
-                              <td>{bill.customerName}</td>
-                              <td>{bill.mobileNumber}</td>
                               <td>{bill.items.length}</td>
                               <td>₹{(bill.totalAmount || 0).toFixed(2)}</td>
                               <td>
-                                <button 
+                                <button
                                   className="btn btn-sm btn-info me-2"
                                   onClick={() => editBill(bill)}
                                 >
                                   Edit
                                 </button>
-                                <button 
+                                <button
                                   className="btn btn-sm btn-primary"
                                   onClick={() => reprintBill(bill)}
                                 >
@@ -1087,7 +693,7 @@ const editBill = (bill) => {
                         </tbody>
                       </table>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
@@ -1095,328 +701,6 @@ const editBill = (bill) => {
         </Tabs>
       </ErrorBoundary>
     </div>
-  );
-};
-
-const BillForm = ({
-  bill,
-  products,
-  filteredProducts,
-  savedContacts,
-  loadingProducts,
-  error,
-  updateBillState,
-  onCustomerNameChange,
-  onMobileNumberChange,
-  onProductSearch,
-  onSelectProduct,
-  onRemoveItem,
-  onPrint,
-  onProductKeyDown,
-  onQuantityKeyDown,
-  onClearBill,
-  productSearchRefs,
-  quantityRefs,
-  customerNameRefs,
-  mobileNumberRefs,
-  dropdownRefs,
-  calculateTotal
-}) => {
-  const [showContactDropdown, setShowContactDropdown] = useState(false);
-  const [contactSearch, setContactSearch] = useState('');
-  const dropdownContainerRef = useRef(null);
-
-  const filteredContacts = savedContacts.filter(contact => 
-    contact?.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
-    contact?.mobileNumber?.includes(contactSearch)
-  );
-
-  const selectContact = (contact) => {
-    onCustomerNameChange(contact.name);
-    onMobileNumberChange(contact.mobileNumber);
-    setShowContactDropdown(false);
-    setContactSearch('');
-  };
-
-  const handleCustomerNameKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (mobileNumberRefs.current) {
-        mobileNumberRefs.current.focus();
-      }
-    } else if (e.key === 'ArrowDown' && filteredContacts.length > 0) {
-      e.preventDefault();
-      setShowContactDropdown(true);
-      const firstItem = document.querySelector('.contact-item');
-      if (firstItem) firstItem.focus();
-    } else if (e.key === 'Escape') {
-      setShowContactDropdown(false);
-    }
-  };
-
-  const handleCustomerNameBlur = (e) => {
-    // Use setTimeout to allow click events on dropdown items to fire first
-    setTimeout(() => {
-      // Check if the newly focused element is not inside our dropdown
-      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(document.activeElement)) {
-        setShowContactDropdown(false);
-      }
-    }, 200);
-  };
-
-  const handleMobileNumberKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (productSearchRefs.current[0]) {
-        productSearchRefs.current[0].focus();
-      }
-    }
-  };
-
-  return (
-    <>
-      {loadingProducts && <div className="alert alert-info">Loading products...</div>}
-      {error && <div className="alert alert-danger">{error}</div>}
-      
-      <div className="row mb-3">
-        <div className="col-md-6">
-          <label className="form-label">Customer Name</label>
-          <div className="position-relative">
-            <input
-              type="text"
-              className="form-control"
-              value={bill.customerName}
-              onChange={(e) => {
-                onCustomerNameChange(e.target.value);
-                setContactSearch(e.target.value);
-                setShowContactDropdown(true);
-              }}
-              onKeyDown={handleCustomerNameKeyDown}
-              onBlur={handleCustomerNameBlur}
-              onFocus={() => setShowContactDropdown(true)}
-              ref={customerNameRefs}
-              placeholder="Type customer name"
-              autoComplete="off"
-            />
-            {showContactDropdown && (
-              <div className="card position-absolute w-100" style={{ zIndex: 1000 }} ref={dropdownContainerRef}>
-                <div className="card-body p-2">
-                  <input
-                    type="text"
-                    className="form-control form-control-sm mb-2"
-                    placeholder="Search contacts..."
-                    value={contactSearch}
-                    onChange={(e) => setContactSearch(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setShowContactDropdown(false);
-                        customerNameRefs.current.focus();
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                    {filteredContacts.length > 0 ? (
-                      <ul className="list-group list-group-flush">
-                        {filteredContacts.map((contact, index) => (
-                          <li 
-                            key={index}
-                            className="list-group-item list-group-item-action p-2 contact-item"
-                            onClick={() => selectContact(contact)}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                selectContact(contact);
-                              } else if (e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                const nextItem = e.currentTarget.nextElementSibling;
-                                if (nextItem) nextItem.focus();
-                              } else if (e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                const prevItem = e.currentTarget.previousElementSibling;
-                                if (prevItem) prevItem.focus();
-                                else customerNameRefs.current.focus();
-                              }
-                            }}
-                            style={{ cursor: 'pointer' }}
-                            tabIndex={0}
-                          >
-                            <div className="d-flex justify-content-between">
-                              <span>{contact.name}</span>
-                              <span className="text-muted">{contact.mobileNumber}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-center text-muted p-2">No contacts found</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="col-md-6">
-          <label className="form-label">Mobile Number</label>
-          <input
-            type="text"
-            className="form-control"
-            value={bill.mobileNumber}
-            onChange={(e) => onMobileNumberChange(e.target.value)}
-            onKeyDown={handleMobileNumberKeyDown}
-            ref={mobileNumberRefs}
-            placeholder="10 digit mobile number"
-            maxLength="10"
-          />
-        </div>
-      </div>
-      
-      <div className="table-responsive mb-4">
-        <table className="table table-bordered">
-          <thead>
-            <tr>
-              <th width="5%">#</th>
-              <th width="20%">Product (English)</th>
-              <th width="20%">Product (Tamil)</th>
-              <th width="10%">Quantity</th>
-              <th width="10%">Price</th>
-              <th width="10%">Total</th>
-              <th width="15%">Available</th>
-              <th width="10%">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bill.billItems.map((item, index) => (
-              <tr key={index} className={bill.activeRow === index ? 'table-active' : ''}>
-                <td>{index + 1}</td>
-                <td>
-                  <div className="position-relative">
-                    <input
-                      type="text"
-                      className="form-control form-control-sm"
-                      value={item.productId ? item.productName : (item.productSearch || '')}
-                      onChange={(e) => onProductSearch(e.target.value, index)}
-                      onKeyDown={(e) => onProductKeyDown(e, index)}
-                      onFocus={() => {
-                        if (!item.productId) {
-                          onProductSearch('', index);
-                        }
-                      }}
-                      ref={(el) => (productSearchRefs.current[index] = el)}
-                      placeholder="Search product..."
-                    />
-                    {bill.showProductDropdown && bill.activeRow === index && (
-                      <div className="card position-absolute w-100" style={{ zIndex: 1000 }}>
-                        <div className="card-body p-2">
-                          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                            {filteredProducts.length > 0 ? (
-                              <ul className="list-group list-group-flush">
-                                {filteredProducts.map((product, idx) => (
-                                  <li 
-                                    key={product._id}
-                                    className={`list-group-item list-group-item-action p-2 product-item-${index}`}
-                                    onClick={() => onSelectProduct(product, index)}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        onSelectProduct(product, index);
-                                      } else if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                        const nextItem = e.currentTarget.nextElementSibling;
-                                        if (nextItem) nextItem.focus();
-                                      } else if (e.key === 'ArrowUp') {
-                                        e.preventDefault();
-                                        const prevItem = e.currentTarget.previousElementSibling;
-                                        if (prevItem) prevItem.focus();
-                                        else productSearchRefs.current[index].focus();
-                                      } else if (e.key === 'Escape') {
-                                        e.preventDefault();
-                                        productSearchRefs.current[index].focus();
-                                      }
-                                    }}
-                                    style={{ cursor: 'pointer' }}
-                                    tabIndex={0}
-                                  >
-                                    <div className="d-flex justify-content-between">
-                                      <span>{product.name}</span>
-                                      <span className="text-muted">₹{(product.price || 0).toFixed(2)}</span>
-                                    </div>
-                                    <div className="text-muted small">{product.nameTamil}</div>
-                                    <div className="text-muted small">Available: {product.stock || 0}</div>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <div className="text-center text-muted p-2">No products found</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </td>
-                <td>{item.productNameTamil || '-'}</td>
-                <td>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={item.quantity}
-                    onChange={(e) => {
-                      const updatedItems = [...bill.billItems];
-                      updatedItems[index].quantity = e.target.value;
-                      updateBillState(bill.id, { billItems: updatedItems });
-                    }}
-                    onKeyDown={(e) => onQuantityKeyDown(e, index)}
-                    ref={(el) => (quantityRefs.current[index] = el)}
-                    min="1"
-                  />
-                </td>
-                <td>₹{(item.price || 0).toFixed(2)}</td>
-                <td>₹{((item.price || 0) * (parseInt(item.quantity) || 0)).toFixed(2)}</td>
-                <td>
-                  {item.productId ? (
-                    products.find(p => p._id === item.productId)?.stock || 0
-                  ) : '-'}
-                </td>
-                <td>
-                  <button 
-                    className="btn btn-sm btn-danger"
-                    onClick={() => onRemoveItem(index)}
-                    disabled={bill.billItems.length === 1 && !bill.billItems[0].productId && !bill.billItems[0].quantity}
-                  >
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-            <tr>
-              <td colSpan="6" className="text-end"><strong>Grand Total:</strong></td>
-              <td colSpan="2"><strong>₹{calculateTotal().toFixed(2)}</strong></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div className="d-flex justify-content-between no-print">
-        <button 
-          className="btn btn-danger" 
-          onClick={onClearBill}
-          disabled={bill.billItems.length === 1 && !bill.billItems[0].productId && !bill.billItems[0].quantity}
-        >
-          Clear Bill
-        </button>
-        <div>
-          <button 
-            className="btn btn-primary" 
-            onClick={onPrint}
-            disabled={bill.isPrinting || calculateTotal() === 0 || !bill.customerName || !bill.mobileNumber}
-          >
-            {bill.isPrinting ? 'Printing...' : 'Print Bill'}
-          </button>
-        </div>
-      </div>
-    </>
   );
 };
 
