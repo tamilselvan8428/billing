@@ -26,20 +26,34 @@ class ErrorBoundary extends React.Component {
 
 const Billing = () => {
   // State for active tabs
+  const generateBillNumber = () => {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const random = Math.floor(1000 + Math.random() * 9000); // 4-digit random number
+    return `BILL-${year}${month}${day}-${random}`;
+  };
+
   const [openBills, setOpenBills] = useState(() => {
     try {
       const savedBills = localStorage.getItem('billing_openBills_v1');
       if (savedBills) {
         const parsed = JSON.parse(savedBills);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Ensure each bill has a billNumber
+          return parsed.map(bill => ({
+            ...bill,
+            billNumber: bill.billNumber || generateBillNumber()
+          }));
+        }
       }
     } catch (e) {
       console.error('Failed to parse saved bills from localStorage:', e);
     }
     return [{
       id: Date.now(),
-      customerName: '',
-      mobileNumber: '',
+      billNumber: generateBillNumber(),
       billItems: [{
         productId: '',
         quantity: '',
@@ -86,8 +100,6 @@ const Billing = () => {
 
   const productSearchRefs = useRef([]);
   const quantityRefs = useRef([]);
-  const customerNameRefs = useRef(null);
-  const mobileNumberRefs = useRef(null);
   const dropdownRefs = useRef(null);
 
   // Persist bill tabs across navigation using localStorage
@@ -119,7 +131,7 @@ useEffect(() => {
 
       case 'F4': // NEW BILL
         e.preventDefault();
-        createNewBill();
+        addNewBill();
         break;
 
       case 'F6': // CLEAR BILL
@@ -210,15 +222,14 @@ useEffect(() => {
     }
   };
 
-  const createNewBill = () => {
-    const newBill = { 
+  const addNewBill = () => {
+    const newBill = {
       id: Date.now(),
-      customerName: '',
-      mobileNumber: '',
-      billItems: [{ 
-        productId: '', 
-        quantity: '', 
-        productName: '', 
+      billNumber: generateBillNumber(),
+      billItems: [{
+        productId: '',
+        quantity: '',
+        productName: '',
         productNameTamil: '',
         price: 0
       }],
@@ -228,7 +239,6 @@ useEffect(() => {
       showProductDropdown: false,
       isPrinting: false
     };
-    
     setOpenBills([...openBills, newBill]);
     setTabIndex(openBills.length);
   };
@@ -247,9 +257,13 @@ useEffect(() => {
   };
 
   const handleProductSearch = (billId, searchTerm, index) => {
+    if (typeof searchTerm !== 'string') {
+      searchTerm = ''; // Ensure searchTerm is a string
+    }
+    const searchLower = searchTerm.toLowerCase();
     const filtered = products.filter(product => 
-      product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product?.nameTamil?.toLowerCase().includes(searchTerm.toLowerCase())
+      (product?.name?.toLowerCase() || '').includes(searchLower) ||
+      (product?.nameTamil?.toLowerCase() || '').includes(searchLower)
     );
     setFilteredProducts(filtered);
     
@@ -468,8 +482,6 @@ useEffect(() => {
       }],
       activeRow: 0,
       activeField: 'productSearch',
-      customerName: '',
-      mobileNumber: '',
       productSearch: ''
     });
   };
@@ -494,18 +506,6 @@ useEffect(() => {
       return;
     }
 
-    if (!bill.customerName || !bill.mobileNumber) {
-      alert('Please enter customer name and mobile number');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
-
-    if (!/^\d{10}$/.test(bill.mobileNumber)) {
-      alert('Mobile number must be 10 digits');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
-
     updateBillState(billId, { isPrinting: true });
 
     try {
@@ -514,8 +514,9 @@ useEffect(() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           items: validItems,
-          customerName: bill.customerName,
-          mobileNumber: bill.mobileNumber
+          billNumber: bill.billNumber,
+          customerName: 'Walk-in Customer',
+          mobileNumber: '0000000000'
         }),
       });
 
@@ -624,8 +625,7 @@ useEffect(() => {
             
             <div class="customer-info">
               <div class="customer-details">
-                <div>வாடிக்கையாளர்: ${bill.customerName}</div>
-                <div>அலைபேசி: ${bill.mobileNumber}</div>
+                <div>பில் எண்: ${bill.billNumber}</div>
               </div>
               <div class="date-time">
                 <div>தேதி: ${date}</div>
@@ -688,8 +688,6 @@ useEffect(() => {
               price: 0,
               productSearch: ''
             }],
-            customerName: '',
-            mobileNumber: '',
             activeRow: 0,
             activeField: 'productSearch',
             productSearch: '',
@@ -809,8 +807,7 @@ useEffect(() => {
           
           <div class="customer-info">
             <div class="customer-details">
-              <div>வாடிக்கையாளர்: ${bill.customerName}</div>
-              <div>அலைபேசி: ${bill.mobileNumber}</div>
+              <div>பில் எண்: ${bill.billNumber}</div>
             </div>
             <div class="date-time">
               <div>தேதி: ${new Date(bill.createdAt).toLocaleDateString('ta-IN')}</div>
@@ -901,8 +898,7 @@ useEffect(() => {
 const editBill = (bill) => {
   const newBill = {
     id: Date.now(),
-    customerName: bill.customerName,
-    mobileNumber: bill.mobileNumber,
+    billNumber: generateBillNumber(),
     billItems: bill.items.map(item => {
       const product = products.find(p => p._id === item.productId);
       const productName = product?.name || item.product?.name || '';
@@ -957,7 +953,7 @@ const editBill = (bill) => {
               </Tab>
             ))}
             <Tab>
-              <button className="btn btn-sm btn-primary" onClick={createNewBill}>
+              <button className="btn btn-sm btn-primary" onClick={addNewBill}>
                 + New Bill
               </button>
             </Tab>
@@ -970,12 +966,9 @@ const editBill = (bill) => {
                 bill={bill}
                 products={products}
                 filteredProducts={filteredProducts}
-                savedContacts={savedContacts}
                 loadingProducts={loadingProducts}
                 error={error}
                 updateBillState={updateBillState}
-                onCustomerNameChange={(value) => updateBillState(bill.id, { customerName: value })}
-                onMobileNumberChange={(value) => updateBillState(bill.id, { mobileNumber: value })}
                 onProductSearch={(value, index) => handleProductSearch(bill.id, value, index)}
                 onSelectProduct={(product, index) => selectProduct(bill.id, product, index)}
                 onRemoveItem={(index) => removeBillItem(bill.id, index)}
@@ -985,8 +978,6 @@ const editBill = (bill) => {
                 onClearBill={() => resetForm(bill.id)}
                 productSearchRefs={productSearchRefs}
                 quantityRefs={quantityRefs}
-                customerNameRefs={customerNameRefs}
-                mobileNumberRefs={mobileNumberRefs}
                 dropdownRefs={dropdownRefs}
                 calculateTotal={() => calculateTotal(bill)}
               />
@@ -995,7 +986,7 @@ const editBill = (bill) => {
 
           <TabPanel>
             <div className="text-center p-4">
-              <button className="btn btn-primary btn-lg" onClick={createNewBill}>
+              <button className="btn btn-primary btn-lg" onClick={addNewBill}>
                 Create New Bill
               </button>
             </div>
@@ -1052,8 +1043,6 @@ const editBill = (bill) => {
                           <tr>
                             <th>Bill No</th>
                             <th>Date</th>
-                            <th>Customer</th>
-                            <th>Mobile</th>
                             <th>Items</th>
                             <th>Total</th>
                             <th>Actions</th>
@@ -1064,8 +1053,6 @@ const editBill = (bill) => {
                             <tr key={bill._id}>
                               <td>{bill.billNumber}</td>
                               <td>{new Date(bill.createdAt).toLocaleString()}</td>
-                              <td>{bill.customerName}</td>
-                              <td>{bill.mobileNumber}</td>
                               <td>{bill.items.length}</td>
                               <td>₹{(bill.totalAmount || 0).toFixed(2)}</td>
                               <td>
@@ -1102,12 +1089,9 @@ const BillForm = ({
   bill,
   products,
   filteredProducts,
-  savedContacts,
   loadingProducts,
   error,
   updateBillState,
-  onCustomerNameChange,
-  onMobileNumberChange,
   onProductSearch,
   onSelectProduct,
   onRemoveItem,
@@ -1117,8 +1101,6 @@ const BillForm = ({
   onClearBill,
   productSearchRefs,
   quantityRefs,
-  customerNameRefs,
-  mobileNumberRefs,
   dropdownRefs,
   calculateTotal
 }) => {
@@ -1126,24 +1108,12 @@ const BillForm = ({
   const [contactSearch, setContactSearch] = useState('');
   const dropdownContainerRef = useRef(null);
 
-  const filteredContacts = savedContacts.filter(contact => 
-    contact?.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
-    contact?.mobileNumber?.includes(contactSearch)
-  );
-
-  const selectContact = (contact) => {
-    onCustomerNameChange(contact.name);
-    onMobileNumberChange(contact.mobileNumber);
-    setShowContactDropdown(false);
-    setContactSearch('');
-  };
-
   const handleCustomerNameKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (mobileNumberRefs.current) {
-        mobileNumberRefs.current.focus();
-      }
+    } else if (e.key === 'ArrowDown') {
+      //   mobileNumberRefs.current.focus();
+      // }
     } else if (e.key === 'ArrowDown' && filteredContacts.length > 0) {
       e.preventDefault();
       setShowContactDropdown(true);
@@ -1167,9 +1137,9 @@ const BillForm = ({
   const handleMobileNumberKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (productSearchRefs.current[0]) {
-        productSearchRefs.current[0].focus();
-      }
+      // if (productSearchRefs.current[0]) {
+      //   productSearchRefs.current[0].focus();
+      // }
     }
   };
 
@@ -1180,95 +1150,28 @@ const BillForm = ({
       
       <div className="row mb-3">
         <div className="col-md-6">
-          <label className="form-label">Customer Name</label>
-          <div className="position-relative">
+          <div className="form-group">
+            <label className="form-label">Bill Number</label>
             <input
               type="text"
               className="form-control"
-              value={bill.customerName}
-              onChange={(e) => {
-                onCustomerNameChange(e.target.value);
-                setContactSearch(e.target.value);
-                setShowContactDropdown(true);
-              }}
-              onKeyDown={handleCustomerNameKeyDown}
-              onBlur={handleCustomerNameBlur}
-              onFocus={() => setShowContactDropdown(true)}
-              ref={customerNameRefs}
-              placeholder="Type customer name"
-              autoComplete="off"
+              value={bill.billNumber || ''}
+              readOnly
+              style={{ fontWeight: 'bold', backgroundColor: '#f8f9fa' }}
             />
-            {showContactDropdown && (
-              <div className="card position-absolute w-100" style={{ zIndex: 1000 }} ref={dropdownContainerRef}>
-                <div className="card-body p-2">
-                  <input
-                    type="text"
-                    className="form-control form-control-sm mb-2"
-                    placeholder="Search contacts..."
-                    value={contactSearch}
-                    onChange={(e) => setContactSearch(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setShowContactDropdown(false);
-                        customerNameRefs.current.focus();
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                    {filteredContacts.length > 0 ? (
-                      <ul className="list-group list-group-flush">
-                        {filteredContacts.map((contact, index) => (
-                          <li 
-                            key={index}
-                            className="list-group-item list-group-item-action p-2 contact-item"
-                            onClick={() => selectContact(contact)}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                selectContact(contact);
-                              } else if (e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                const nextItem = e.currentTarget.nextElementSibling;
-                                if (nextItem) nextItem.focus();
-                              } else if (e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                const prevItem = e.currentTarget.previousElementSibling;
-                                if (prevItem) prevItem.focus();
-                                else customerNameRefs.current.focus();
-                              }
-                            }}
-                            style={{ cursor: 'pointer' }}
-                            tabIndex={0}
-                          >
-                            <div className="d-flex justify-content-between">
-                              <span>{contact.name}</span>
-                              <span className="text-muted">{contact.mobileNumber}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-center text-muted p-2">No contacts found</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
         <div className="col-md-6">
-          <label className="form-label">Mobile Number</label>
-          <input
-            type="text"
-            className="form-control"
-            value={bill.mobileNumber}
-            onChange={(e) => onMobileNumberChange(e.target.value)}
-            onKeyDown={handleMobileNumberKeyDown}
-            ref={mobileNumberRefs}
-            placeholder="10 digit mobile number"
-            maxLength="10"
-          />
+          <div className="form-group">
+            <label className="form-label">Date</label>
+            <input
+              type="text"
+              className="form-control"
+              value={new Date().toLocaleDateString()}
+              readOnly
+              style={{ backgroundColor: '#f8f9fa' }}
+            />
+          </div>
         </div>
       </div>
       
@@ -1330,9 +1233,6 @@ const BillForm = ({
                                         const prevItem = e.currentTarget.previousElementSibling;
                                         if (prevItem) prevItem.focus();
                                         else productSearchRefs.current[index].focus();
-                                      } else if (e.key === 'Escape') {
-                                        e.preventDefault();
-                                        productSearchRefs.current[index].focus();
                                       }
                                     }}
                                     style={{ cursor: 'pointer' }}
@@ -1410,7 +1310,7 @@ const BillForm = ({
           <button 
             className="btn btn-primary" 
             onClick={onPrint}
-            disabled={bill.isPrinting || calculateTotal() === 0 || !bill.customerName || !bill.mobileNumber}
+            disabled={bill.isPrinting || calculateTotal() === 0}
           >
             {bill.isPrinting ? 'Printing...' : 'Print Bill'}
           </button>
