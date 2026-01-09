@@ -491,33 +491,52 @@ useEffect(() => {
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-    const bill = openBills.find(b => b.id === billId);
-    const validItems = bill.billItems
-      .filter(item => item.productId && item.quantity)
-      .map(item => ({
-        productId: item.productId,
-        quantity: parseInt(item.quantity || 0),
-        price: parseFloat(item.price || 0)
-      }));
+      const bill = openBills.find(b => b.id === billId);
+      const validItems = bill.billItems
+        .filter(item => item.productId && item.quantity)
+        .map(item => ({
+          productId: item.productId,
+          quantity: parseInt(item.quantity || 0),
+          price: parseFloat(item.price || 0),
+          nameTamil: item.productNameTamil || ''
+        }));
 
-    if (validItems.length === 0) {
-      alert('Please add items to the bill before printing');
-      updateBillState(billId, { isPrinting: false });
-      return;
-    }
+      if (validItems.length === 0) {
+        alert('Please add items to the bill before printing');
+        updateBillState(billId, { isPrinting: false });
+        return;
+      }
 
-    updateBillState(billId, { isPrinting: true });
+      updateBillState(billId, { isPrinting: true });
 
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+      try {
+        const isExistingBill = Boolean(bill._id);
+        
+        if (isExistingBill && !bill._id) {
+          throw new Error('Cannot update bill: Missing bill ID');
+        }
+        
+        const url = isExistingBill 
+          ? `https://billing-server-gaha.onrender.com/api/bills/${bill._id}`
+          : 'https://billing-server-gaha.onrender.com/api/bills';
+          
+        const method = isExistingBill ? 'PUT' : 'POST';
+        
+        const requestBody = {
           items: validItems,
-          billNumber: bill.billNumber,
-          customerName: 'Walk-in Customer',
-          mobileNumber: '0000000000'
-        }),
+          customerName: bill.customerName || 'Walk-in Customer',
+          mobileNumber: bill.mobileNumber || '0000000000'
+        };
+        
+        // Only include billNumber for new bills
+        if (!isExistingBill) {
+          requestBody.billNumber = bill.billNumber;
+        }
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
       });
 
       const responseData = await response.json();
@@ -712,18 +731,30 @@ useEffect(() => {
   };
 
   const reprintBill = async (bill) => {
-    try {
-      // Set printing state to true
+  try {
+    // Set printing state to true if this is an open bill
+    if (bill.id) {
       updateBillState(bill.id, { isPrinting: true });
-      
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        throw new Error('Popup was blocked. Please allow popups for this site.');
+    }
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      throw new Error('Popup was blocked. Please allow popups for this site.');
+    }
+    
+    // If this is a bill from history, fetch the full details
+    let billToPrint = bill;
+    if (!bill.items && bill._id) {
+      const response = await fetch(`https://billing-server-gaha.onrender.com/api/bills/${bill._id}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch bill details');
       }
+      billToPrint = await response.json();
+    }  
 
-      const now = new Date();
-      const date = now.toLocaleDateString('ta-IN');
-      const time = now.toLocaleTimeString('ta-IN');
+    const now = new Date();
+    const date = now.toLocaleDateString('ta-IN');
+    const time = now.toLocaleTimeString('ta-IN');
 
     const billContent = `
       <!DOCTYPE html>
@@ -807,11 +838,11 @@ useEffect(() => {
           
           <div class="customer-info">
             <div class="customer-details">
-              <div>பில் எண்: ${bill.billNumber}</div>
+              <div>பில் எண்: ${billToPrint.billNumber}</div>
             </div>
             <div class="date-time">
-              <div>தேதி: ${new Date(bill.createdAt).toLocaleDateString('ta-IN')}</div>
-              <div>நேரம்: ${new Date(bill.createdAt).toLocaleTimeString('ta-IN')}</div>
+              <div>தேதி: ${new Date(billToPrint.createdAt).toLocaleDateString('ta-IN')}</div>
+              <div>நேரம்: ${new Date(billToPrint.createdAt).toLocaleTimeString('ta-IN')}</div>
             </div>
           </div>
           
@@ -826,7 +857,7 @@ useEffect(() => {
               </tr>
             </thead>
             <tbody>
-              ${bill.items.map((item, idx) => `
+              ${billToPrint.items.map((item, idx) => `
                 <tr class="item-row">
                   <td>${idx + 1}</td>
                   <td>${item.product?.nameTamil || '-'}</td>
@@ -841,7 +872,7 @@ useEffect(() => {
           <table>
             <tr class="total-row">
               <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-              <td>₹${(bill.totalAmount || 0).toFixed(2)}</td>
+              <td>₹${(billToPrint.totalAmount || 0).toFixed(2)}</td>
             </tr>
           </table>
           
@@ -852,70 +883,79 @@ useEffect(() => {
       </html>
     `;
 
-      printWindow.document.open();
-      printWindow.document.write(billContent);
-      printWindow.document.close();
+    printWindow.document.open();
+    printWindow.document.write(billContent);
+    printWindow.document.close();
 
-      await new Promise((resolve, reject) => {
-        printWindow.onload = () => {
+    await new Promise((resolve, reject) => {
+      printWindow.onload = () => {
+        try {
+          setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+            resolve();
+          }, 200);
+        } catch (err) {
+          printWindow.close();
+          reject(err);
+        }
+      };
+      
+      // Fallback in case onload doesn't fire
+      setTimeout(() => {
+        if (!printWindow.closed) {
           try {
-            setTimeout(() => {
-              printWindow.print();
-              printWindow.close();
-              resolve();
-            }, 200);
+            printWindow.print();
+            printWindow.close();
+            resolve();
           } catch (err) {
             printWindow.close();
             reject(err);
           }
-        };
-        
-        // Fallback in case onload doesn't fire
-        setTimeout(() => {
-          if (!printWindow.closed) {
-            try {
-              printWindow.print();
-              printWindow.close();
-              resolve();
-            } catch (err) {
-              printWindow.close();
-              reject(err);
-            }
-          }
-        }, 1000);
-      });
-    } catch (err) {
-      console.error('Error in reprintBill:', err);
-      alert(`Error reprinting bill: ${err.message}`);
-    } finally {
-      // Ensure we always reset the printing state
-      if (bill?.id) {
-        updateBillState(bill.id, { isPrinting: false });
-      }
+        }
+      }, 1000);
+    });
+  } catch (err) {
+    console.error('Error in reprintBill:', err);
+    alert(`Error reprinting bill: ${err.message}`);
+  } finally {
+    // Ensure we always reset the printing state
+    if (bill?.id) {
+      updateBillState(bill.id, { isPrinting: false });
     }
-  };
+  }
+};
 
 const editBill = (bill) => {
+  // Check if this bill is already open in a tab
+  const existingTabIndex = openBills.findIndex(b => b.billNumber === bill.billNumber);
+  
+  if (existingTabIndex >= 0) {
+    // Switch to the existing tab
+    setTabIndex(existingTabIndex);
+    return;
+  }
+
   const newBill = {
     id: Date.now(),
-    billNumber: generateBillNumber(),
-    billItems: bill.items.map(item => {
-      const product = products.find(p => p._id === item.productId);
-      const productName = product?.name || item.product?.name || '';
-      return {
-        productId: item.productId || '',
-        quantity: item.quantity.toString(),
-        productName: productName,
-        productNameTamil: product?.nameTamil || item.product?.nameTamil || '',
-        price: item.price || 0,
-        productSearch: productName // Set the search term to the product name
-      };
-    }),
+    _id: bill._id, // Include the MongoDB _id for updates
+    billNumber: bill.billNumber,
+    billItems: bill.items.map(item => ({
+      productId: item.productId || '',
+      quantity: item.quantity.toString(),
+      productName: item.nameTamil || '',
+      productNameTamil: item.nameTamil || '',
+      price: item.price || 0,
+      productSearch: item.nameTamil || ''
+    })),
     activeRow: 0,
     activeField: 'productSearch',
     productSearch: '',
     showProductDropdown: false,
-    isPrinting: false
+    isPrinting: false,
+    isExistingBill: true,
+    customerName: bill.customerName || 'Walk-in Customer',
+    mobileNumber: bill.mobileNumber || '0000000000'
   };
 
   // If no items, add an empty row
@@ -942,7 +982,7 @@ const editBill = (bill) => {
               <Tab key={bill.id}>
                 Bill {index + 1}
                 <button 
-                  className="ms-2 btn btn-sm btn-outline-danger"
+                  className="close-tab"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeBill(index);
@@ -952,11 +992,7 @@ const editBill = (bill) => {
                 </button>
               </Tab>
             ))}
-            <Tab>
-              <button className="btn btn-sm btn-primary" onClick={addNewBill}>
-                + New Bill
-              </button>
-            </Tab>
+            <Tab>+ New Bill</Tab>
             <Tab>Bill History</Tab>
           </TabList>
 
@@ -1292,7 +1328,7 @@ const BillForm = ({
             ))}
             <tr>
               <td colSpan="6" className="text-end"><strong>Grand Total:</strong></td>
-              <td colSpan="2"><strong>₹{calculateTotal().toFixed(2)}</strong></td>
+              <td colSpan="2"><strong>₹{calculateTotal(bill).toFixed(2)}</strong></td>
             </tr>
           </tbody>
         </table>
@@ -1310,7 +1346,7 @@ const BillForm = ({
           <button 
             className="btn btn-primary" 
             onClick={onPrint}
-            disabled={bill.isPrinting || calculateTotal() === 0}
+            disabled={bill.isPrinting || calculateTotal(bill) === 0}
           >
             {bill.isPrinting ? 'Printing...' : 'Print Bill'}
           </button>
