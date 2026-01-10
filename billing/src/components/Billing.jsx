@@ -763,71 +763,60 @@ useEffect(() => {
           <title>ராஜா ஸ்னாக்ஸ் பில்</title>
           <meta charset="UTF-8">
           <style>
-            @page { size: 80mm auto; margin: 0; }
-            body { 
-              width: 80mm;
-              margin: 0;
-              padding: 2mm;
-              font-family: Arial, sans-serif;
-              font-size: 14px;
-              line-height: 1.2;
-            }
-            .header { 
-              text-align: center; 
-              margin-bottom: 2mm; 
-            }
-            .shop-name { 
-              font-weight: bold; 
-              font-size: 16px; 
-              margin: 0; 
-            }
-            .bill-title { 
-              font-weight: bold; 
-              font-size: 15px; 
-              margin: 1px 0; 
-            }
-            .contact { 
-              font-size: 12px; 
-              margin: 1px 0 2px 0; 
-            }
-            .customer-info { 
-              margin-bottom: 2mm;
-              display: flex;
-              justify-content: space-between;
-            }
-            .customer-details {
-              text-align: left;
-            }
-            .date-time {
-              text-align: right;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-bottom: 2mm; 
-            }
-            th, td { 
-              padding: 2mm 0; 
-              text-align: left; 
-            }
-            th { 
-              border-bottom: 1px dashed #000; 
-            }
-            .item-row td { 
-              border-bottom: 1px dashed #ddd; 
-              padding: 2mm 0; 
-            }
-            .total-row { 
-              font-weight: bold; 
-              border-top: 1px dashed #000; 
-              border-bottom: 1px dashed #000; 
-            }
-            .footer { 
-              text-align: center; 
-              margin-top: 2mm; 
-              font-size: 12px; 
-            }
-          </style>
+@page {
+  size: 80mm auto;
+  margin: 0;
+}
+
+html, body {
+  width: 80mm;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2mm;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 2mm 0;
+}
+
+.item-row,
+tr,
+td,
+th {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
+
+.total-row {
+  font-weight: bold;
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 2mm;
+  font-size: 12px;
+}
+
+@media print {
+  body {
+    overflow: visible !important;
+  }
+}
+</style>
+
         </head>
         <body>
           <div class="header">
