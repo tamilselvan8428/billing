@@ -562,106 +562,79 @@ useEffect(() => {
 
       const validBillItems = bill.billItems.filter(item => item.productId && item.quantity);
 
-const billContent = `
-  <!DOCTYPE html>
-  <html>
-    <head>
-      <title>ராஜா ஸ்னாக்ஸ் பில்</title>
-      <meta charset="UTF-8">
-      <style>
-        @page { 
-          size: auto;  /* Changed from 80mm to auto to fit content */
-          margin: 0; 
-          padding: 2mm;
-        }
-        body { 
-          width: 100%;
-          max-width: 80mm;
-          margin: 0 auto;  /* Center the content */
-          padding: 2mm;
-          font-family: Arial, sans-serif;
-          font-size: 14px;
-          line-height: 1.2;
-          box-sizing: border-box;  /* Include padding in width calculation */
-        }
-        .header { 
-          text-align: center; 
-          margin-bottom: 2mm; 
-        }
-        .shop-name { 
-          font-weight: bold; 
-          font-size: 16px; 
-          margin: 0; 
-        }
-        .bill-title { 
-          font-weight: bold; 
-          font-size: 15px; 
-          margin: 1px 0; 
-        }
-        .contact { 
-          font-size: 12px; 
-          margin: 1px 0 2px 0; 
-        }
-        .customer-info { 
-          margin-bottom: 2mm;
-          display: flex;
-          justify-content: space-between;
-          flex-wrap: wrap;  /* Allow wrapping on small screens */
-        }
-        .customer-details {
-          text-align: left;
-        }
-        .date-time {
-          text-align: right;
-        }
-        table { 
-          width: 100%; 
-          border-collapse: collapse; 
-          margin-bottom: 2mm; 
-          table-layout: fixed;  /* Better table layout control */
-          word-wrap: break-word; /* Break long words */
-        }
-        th, td { 
-          padding: 2mm 0; 
-          text-align: left; 
-          word-break: break-word; /* Ensure text breaks to prevent overflow */
-        }
-        th { 
-          border-bottom: 1px dashed #000; 
-        }
-        .item-row td { 
-          border-bottom: 1px dashed #ddd; 
-          padding: 2mm 0; 
-          vertical-align: top;  /* Align content to top of cell */
-        }
-        .total-row { 
-          font-weight: bold; 
-          border-top: 1px dashed #000; 
-          border-bottom: 1px dashed #000; 
-        }
-        .footer { 
-          text-align: center; 
-          margin-top: 2mm; 
-          font-size: 12px; 
-        }
-        /* Add media print specific styles */
-        @media print {
-          body {
-            width: 100%;
-            margin: 0;
-            padding: 2mm;
-          }
-          /* Ensure tables don't break across pages */
-          table { 
-            page-break-inside: avoid;
-          }
-          /* Ensure each item stays together */
-          .item-row {
-            page-break-inside: avoid;
-          }
-        }
-      </style>
-    </head>
+      const billContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>ராஜா ஸ்னாக்ஸ் பில்</title>
+            <meta charset="UTF-8">
+            <style>
+              @page { size: 80mm auto; margin: 0; }
+              body { 
+                width: 80mm;
+                margin: 0;
+                padding: 2mm;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.2;
+              }
+              .header { 
+                text-align: center; 
+                margin-bottom: 2mm; 
+              }
+              .shop-name { 
+                font-weight: bold; 
+                font-size: 16px; 
+                margin: 0; 
+              }
+              .bill-title { 
+                font-weight: bold; 
+                font-size: 15px; 
+                margin: 1px 0; 
+              }
+              .contact { 
+                font-size: 12px; 
+                margin: 1px 0 2px 0; 
+              }
+              .customer-info { 
+                margin-bottom: 2mm;
+                display: flex;
+                justify-content: space-between;
+              }
+              .customer-details {
+                text-align: left;
+              }
+              .date-time {
+                text-align: right;
+              }
+              table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 2mm; 
+              }
+              th, td { 
+                padding: 2mm 0; 
+                text-align: left; 
+              }
+              th { 
+                border-bottom: 1px dashed #000; 
+              }
+              .item-row td { 
+                border-bottom: 1px dashed #ddd; 
+                padding: 2mm 0; 
+              }
+              .total-row { 
+                font-weight: bold; 
+                border-top: 1px dashed #000; 
+                border-bottom: 1px dashed #000; 
+              }
+              .footer { 
+                text-align: center; 
+                margin-top: 2mm; 
+                font-size: 12px; 
+              }
+            </style>
+          </head>
           <body>
             <div class="header">
               <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
