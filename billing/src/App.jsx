@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import Billing from './components/Billing';
 import ProductManagement from './components/ProductManagement';
@@ -6,6 +6,25 @@ import StockManagement from './components/StockManagement';
 
 function App() {
   const [activeTab, setActiveTab] = useState('billing');
+
+  // Keep-alive mechanism to prevent session timeouts
+  useEffect(() => {
+    const keepAliveInterval = setInterval(async () => {
+      try {
+        await fetch('/api/keep-alive', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+      } catch (error) {
+        console.log('Keep-alive failed:', error);
+      }
+    }, 5 * 60 * 1000); // Ping every 5 minutes
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(keepAliveInterval);
+  }, []);
 
   return (
     <Router>

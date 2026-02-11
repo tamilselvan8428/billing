@@ -177,6 +177,18 @@ useEffect(() => {
     fetchBillHistory();
   }, []);
 
+  // Auto-focus on the first product search field when component loads or when switching tabs
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const activeBill = openBills[tabIndex];
+      if (activeBill && productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
+      }
+    }, 100); // Small delay to ensure DOM is ready
+
+    return () => clearTimeout(timer);
+  }, [tabIndex, openBills]);
+
   useEffect(() => {
     fetchBillHistory();
   }, [dateFilter]);
@@ -218,42 +230,8 @@ useEffect(() => {
       console.error('Error fetching data:', err);
       setError(err.message);
     } finally {
-      setHistoryLoading(false);
+      setLoadingProducts(false);
     }
-  };
-
-  const addNewBill = () => {
-    const newBill = {
-      id: Date.now(),
-      billNumber: generateBillNumber(),
-      billItems: [{
-        productId: '',
-        quantity: '',
-        productName: '',
-        productNameTamil: '',
-        price: 0
-      }],
-      activeRow: 0,
-      activeField: 'productSearch',
-      productSearch: '',
-      showProductDropdown: false,
-      isPrinting: false
-    };
-    setOpenBills([...openBills, newBill]);
-    setTabIndex(openBills.length);
-  };
-
-  const closeBill = (index) => {
-    const updatedBills = [...openBills];
-    updatedBills.splice(index, 1);
-    setOpenBills(updatedBills);
-    setTabIndex(Math.min(index, updatedBills.length - 1));
-  };
-
-  const updateBillState = (billId, updates) => {
-    setOpenBills(openBills.map(bill => 
-      bill.id === billId ? { ...bill, ...updates } : bill
-    ));
   };
 
   const handleProductSearch = (billId, searchTerm, index) => {
