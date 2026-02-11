@@ -234,6 +234,12 @@ useEffect(() => {
     }
   };
 
+  const updateBillState = (billId, updates) => {
+    setOpenBills(openBills.map(bill => 
+      bill.id === billId ? { ...bill, ...updates } : bill
+    ));
+  };
+
   const handleProductSearch = (billId, searchTerm, index) => {
     if (typeof searchTerm !== 'string') {
       searchTerm = ''; // Ensure searchTerm is a string
