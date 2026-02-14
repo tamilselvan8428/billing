@@ -102,6 +102,15 @@ const Billing = () => {
   const quantityRefs = useRef([]);
   const dropdownRefs = useRef(null);
 
+  // Update bill state helper function
+  const updateBillState = (billId, updates) => {
+    setOpenBills(prevBills => 
+      prevBills.map(bill => 
+        bill.id === billId ? { ...bill, ...updates } : bill
+      )
+    );
+  };
+
   // Persist bill tabs across navigation using localStorage
 
   useEffect(() => {
@@ -177,6 +186,18 @@ useEffect(() => {
     fetchBillHistory();
   }, []);
 
+  // Auto-focus on the first product search field only when component loads or switching tabs
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const activeBill = openBills[tabIndex];
+      if (activeBill && productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
+      }
+    }, 100); // Small delay to ensure DOM is ready
+
+    return () => clearTimeout(timer);
+  }, [tabIndex]); // Only depend on tabIndex, not openBills
+
   useEffect(() => {
     fetchBillHistory();
   }, [dateFilter]);
@@ -220,40 +241,6 @@ useEffect(() => {
     } finally {
       setHistoryLoading(false);
     }
-  };
-
-  const addNewBill = () => {
-    const newBill = {
-      id: Date.now(),
-      billNumber: generateBillNumber(),
-      billItems: [{
-        productId: '',
-        quantity: '',
-        productName: '',
-        productNameTamil: '',
-        price: 0
-      }],
-      activeRow: 0,
-      activeField: 'productSearch',
-      productSearch: '',
-      showProductDropdown: false,
-      isPrinting: false
-    };
-    setOpenBills([...openBills, newBill]);
-    setTabIndex(openBills.length);
-  };
-
-  const closeBill = (index) => {
-    const updatedBills = [...openBills];
-    updatedBills.splice(index, 1);
-    setOpenBills(updatedBills);
-    setTabIndex(Math.min(index, updatedBills.length - 1));
-  };
-
-  const updateBillState = (billId, updates) => {
-    setOpenBills(openBills.map(bill => 
-      bill.id === billId ? { ...bill, ...updates } : bill
-    ));
   };
 
   const handleProductSearch = (billId, searchTerm, index) => {
@@ -340,6 +327,21 @@ useEffect(() => {
           quantityRefs.current[index].focus();
         }
         break;
+      case 'Tab':
+        e.preventDefault();
+        if (currentItem.productId) {
+          // If product is selected, move to quantity field
+          if (quantityRefs.current[index]) {
+            quantityRefs.current[index].focus();
+          }
+        } else {
+          // If no product selected, try to select first matching product
+          if (bill.showProductDropdown && filteredProducts.length > 0) {
+            const firstProduct = filteredProducts[0];
+            selectProduct(billId, firstProduct, index);
+          }
+        }
+        break;
       case 'ArrowDown':
         e.preventDefault();
         if (!bill.showProductDropdown && filteredProducts.length > 0) {
@@ -367,9 +369,6 @@ useEffect(() => {
       case 'Escape':
         updateBillState(billId, { showProductDropdown: false });
         e.stopPropagation();
-        break;
-      case 'Tab':
-        updateBillState(billId, { showProductDropdown: false });
         break;
       default:
         break;
@@ -468,6 +467,42 @@ useEffect(() => {
       if (!item.productId || !item.quantity) return sum;
       return sum + ((item.price || 0) * parseInt(item.quantity || 0));
     }, 0);
+  };
+
+  const addNewBill = () => {
+    const newBill = {
+      id: Date.now(),
+      billNumber: generateBillNumber(),
+      billItems: [{
+        productId: '',
+        quantity: '',
+        productName: '',
+        productNameTamil: '',
+        price: 0
+      }],
+      activeRow: 0,
+      activeField: 'productSearch',
+      productSearch: '',
+      showProductDropdown: false,
+      isPrinting: false
+    };
+    setOpenBills([...openBills, newBill]);
+    setTabIndex(openBills.length);
+    
+    // Auto-focus on the new bill's first product search field
+    setTimeout(() => {
+      if (productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
+      }
+    }, 100);
+  };
+
+  const closeBill = (index) => {
+    const newOpenBills = openBills.filter((_, i) => i !== index);
+    setOpenBills(newOpenBills);
+    if (tabIndex >= newOpenBills.length) {
+      setTabIndex(Math.max(0, newOpenBills.length - 1));
+    }
   };
 
   const resetForm = (billId) => {
@@ -627,6 +662,7 @@ useEffect(() => {
                 font-weight: bold; 
                 border-top: 1px dashed #000; 
                 border-bottom: 1px dashed #000; 
+                font-size: 16px;
               }
               .footer { 
                 text-align: center; 
@@ -802,6 +838,7 @@ th {
   font-weight: bold;
   border-top: 1px dashed #000;
   border-bottom: 1px dashed #000;
+  font-size: 16px;
 }
 
 .footer {
@@ -981,20 +1018,18 @@ const editBill = (bill) => {
                 </button>
               </Tab>
             ))}
-            <Tab>
-              <button 
-                className="btn btn-sm btn-primary" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addNewBill();
-                }}
-                style={{margin: '0 5px', padding: '2px 8px', fontSize: '14px', lineHeight: '1.5'}}
-              >
-                + New Bill
-              </button>
-            </Tab>
             <Tab>Bill History</Tab>
           </TabList>
+
+          <div className="mb-3">
+            <button 
+              className="btn btn-primary"
+              onClick={addNewBill}
+              style={{fontSize: '14px', lineHeight: '1.5'}}
+            >
+              + New Bill
+            </button>
+          </div>
 
           {openBills.map((bill) => (
             <TabPanel key={bill.id}>
@@ -1020,11 +1055,13 @@ const editBill = (bill) => {
             </TabPanel>
           ))}
 
-          <TabPanel>
-            <div className="text-center p-4">
-              <p>Click the "+ New Bill" button in the tab bar to create a new bill.</p>
-            </div>
-          </TabPanel>
+          {openBills.length === 0 && (
+            <TabPanel>
+              <div className="text-center p-4">
+                <p>Click the "+ New Bill" button to create a new bill.</p>
+              </div>
+            </TabPanel>
+          )}
 
           <TabPanel>
             <div className="card">
@@ -1086,9 +1123,9 @@ const editBill = (bill) => {
                           {billHistory.map((bill) => (
                             <tr key={bill._id}>
                               <td>{bill.billNumber}</td>
-                              <td>{new Date(bill.createdAt).toLocaleString()}</td>
+                              <td>{new Date(bill.date).toLocaleString()}</td>
                               <td>{bill.items.length}</td>
-                              <td>₹{(bill.totalAmount || 0).toFixed(2)}</td>
+                              <td>₹{(bill.grandTotal || 0).toFixed(2)}</td>
                               <td>
                                 <button 
                                   className="btn btn-sm btn-info me-2"
