@@ -131,10 +131,10 @@ useEffect(() => {
 
     switch (e.key) {
       case 'F2':
-      case 'F3': // PRINT BILL
+      case 'F3': // PRINT BILL - Direct print without preview
         e.preventDefault();
         if (!activeBill.isPrinting) {
-          handlePrint(activeBill.id);
+          handleDirectPrint(activeBill.id);
         }
         break;
 
@@ -519,6 +519,240 @@ useEffect(() => {
       activeField: 'productSearch',
       productSearch: ''
     });
+  };
+
+  const handleDirectPrint = async (billId) => {
+    updateBillState(billId, { isPrinting: true });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+      const bill = openBills.find(b => b.id === billId);
+      const validItems = bill.billItems
+        .filter(item => item.productId && item.quantity)
+        .map(item => ({
+          productId: item.productId,
+          quantity: parseInt(item.quantity || 0),
+          price: parseFloat(item.price || 0),
+          nameTamil: item.productNameTamil || ''
+        }));
+
+      if (validItems.length === 0) {
+        alert('Please add items to the bill before printing');
+        updateBillState(billId, { isPrinting: false });
+        return;
+      }
+
+      const isExistingBill = Boolean(bill._id);
+        
+        if (isExistingBill && !bill._id) {
+          throw new Error('Cannot update bill: Missing bill ID');
+        }
+        
+        const url = isExistingBill 
+          ? `https://billing-server-gaha.onrender.com/api/bills/${bill._id}`
+          : 'https://billing-server-gaha.onrender.com/api/bills';
+          
+        const method = isExistingBill ? 'PUT' : 'POST';
+        
+        const requestBody = {
+          items: validItems,
+          customerName: bill.customerName || 'Walk-in Customer',
+          mobileNumber: bill.mobileNumber || '0000000000'
+        };
+        
+        // Only include billNumber for new bills
+        if (!isExistingBill) {
+          requestBody.billNumber = bill.billNumber;
+        }
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Failed to create bill');
+      }
+
+      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
+      setProducts(await productsResponse.json());
+      await fetchBillHistory();
+
+      const now = new Date();
+      const date = now.toLocaleDateString('ta-IN');
+      const time = now.toLocaleTimeString('ta-IN');
+
+      // Create iframe for direct printing
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'absolute';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '-9999px';
+      iframe.style.width = '80mm';
+      iframe.style.height = '0px';
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      
+      const billContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>ராஜா ஸ்னாக்ஸ் பில்</title>
+            <meta charset="UTF-8">
+            <style>
+              @page { size: 80mm auto; margin: 0; }
+              body { 
+                width: 80mm;
+                margin: 0;
+                padding: 2mm;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.2;
+              }
+              .header { 
+                text-align: center; 
+                margin-bottom: 2mm; 
+              }
+              .shop-name { 
+                font-weight: bold; 
+                font-size: 16px; 
+                margin: 0; 
+              }
+              .bill-title { 
+                font-weight: bold; 
+                font-size: 15px; 
+                margin: 1px 0; 
+              }
+              .contact { 
+                font-size: 12px; 
+                margin: 1px 0 2px 0; 
+              }
+              .customer-info { 
+                margin-bottom: 2mm;
+                display: flex;
+                justify-content: space-between;
+              }
+              .customer-details {
+                text-align: left;
+              }
+              .date-time {
+                text-align: right;
+              }
+              table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 2mm; 
+              }
+              th, td { 
+                padding: 2mm 0; 
+                text-align: left; 
+              }
+              th { 
+                border-bottom: 1px dashed #000; 
+              }
+              .item-row td { 
+                border-bottom: 1px dashed #ddd; 
+                padding: 2mm 0; 
+              }
+              .total-row { 
+                font-weight: bold; 
+                border-top: 1px dashed #000; 
+                border-bottom: 1px dashed #000; 
+                font-size: 16px;
+              }
+              .footer { 
+                text-align: center; 
+                margin-top: 2mm; 
+                font-size: 12px; 
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
+              <p class="bill-title">கேஷ் பில்</p>
+              <p class="contact">தொலைபேசி: 9842263860</p>
+            </div>
+            
+            <div class="customer-info">
+              <div class="customer-details">
+                <div>பில் எண்: ${bill.billNumber}</div>
+              </div>
+              <div class="date-time">
+                <div>தேதி: ${date}</div>
+                <div>நேரம்: ${time}</div>
+              </div>
+            </div>
+            
+            <table>
+              <thead>
+                <tr>
+                  <th width="10%">#</th>
+                  <th width="40%">பொருள்</th>
+                  <th width="15%">அளவு</th>
+                  <th width="20%" style="padding-right: 10px;">விலை</th>
+                  <th width="15%">மொத்தம்</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${validItems.map((item, idx) => `
+                  <tr class="item-row">
+                    <td>${idx + 1}</td>
+                    <td>${item.nameTamil || '-'}</td>
+                    <td>${item.quantity}</td>
+                    <td style="padding-right: 10px;">₹${(item.price || 0).toFixed(2)}</td>
+                    <td>₹${((item.price || 0) * parseInt(item.quantity || 0)).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            
+            <table>
+              <tr class="total-row">
+                <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
+                <td>₹${calculateTotal(bill).toFixed(2)}</td>
+              </tr>
+            </table>
+            
+            <div class="footer">
+              <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      iframeDoc.open();
+      iframeDoc.write(billContent);
+      iframeDoc.close();
+
+      // Wait for content to load, then print
+      setTimeout(() => {
+        iframe.contentWindow.print();
+        document.body.removeChild(iframe);
+        updateBillState(billId, {
+          isPrinting: false,
+          billItems: [{ 
+            productId: '', 
+            quantity: '', 
+            productName: '', 
+            productNameTamil: '',
+            price: 0,
+            productSearch: ''
+          }],
+          activeRow: 0,
+          activeField: 'productSearch',
+          productSearch: '',
+          showProductDropdown: false
+        });
+      }, 500);
+    } catch (err) {
+      console.error('Error creating bill:', err);
+      alert(`Error: ${err.message}`);
+      updateBillState(billId, { isPrinting: false });
+    }
   };
 
   const handlePrint = async (billId) => {
@@ -1389,6 +1623,6 @@ const BillForm = ({
       </div>
     </>
   );
-};
+} // Added closing brace here
 
 export default Billing;
