@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
 
-
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -187,14 +186,14 @@ useEffect(() => {
     fetchBillHistory();
   }, []);
 
-  // Auto-focus on the first product search field only when component loads or switching tabs
+  // Auto-focus on the first product search field when component loads or switching tabs
   useEffect(() => {
     const timer = setTimeout(() => {
       const activeBill = openBills[tabIndex];
       if (activeBill && productSearchRefs.current[0]) {
         productSearchRefs.current[0].focus();
       }
-    }, 100); // Small delay to ensure DOM is ready
+    }, 150); // Slightly longer delay to ensure DOM is ready
 
     return () => clearTimeout(timer);
   }, [tabIndex]); // Only depend on tabIndex, not openBills
@@ -202,6 +201,15 @@ useEffect(() => {
   useEffect(() => {
     fetchBillHistory();
   }, [dateFilter]);
+
+  // Keep application active with periodic server requests
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch("https://billing-server-gaha.onrender.com");
+    }, 300000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, []);
 
   const loadSavedContacts = async () => {
     try {
@@ -520,6 +528,13 @@ useEffect(() => {
       activeField: 'productSearch',
       productSearch: ''
     });
+    
+    // Auto-focus on the first product search field after clearing
+    setTimeout(() => {
+      if (productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
+      }
+    }, 100);
   };
 
   const handleDirectPrint = async (billId) => {
@@ -749,10 +764,24 @@ useEffect(() => {
           showProductDropdown: false
         });
       }, 500);
+      
+      // Auto-focus on the first product search field after printing
+      setTimeout(() => {
+        if (productSearchRefs.current[0]) {
+          productSearchRefs.current[0].focus();
+        }
+      }, 600);
     } catch (err) {
       console.error('Error creating bill:', err);
       alert(`Error: ${err.message}`);
       updateBillState(billId, { isPrinting: false });
+      
+      // Auto-focus on the first product search field even after error
+      setTimeout(() => {
+        if (productSearchRefs.current[0]) {
+          productSearchRefs.current[0].focus();
+        }
+      }, 100);
     }
   };
 
