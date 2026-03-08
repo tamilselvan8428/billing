@@ -28,29 +28,53 @@ const Billing = () => {
   // State for active tabs
   const generateBillNumber = () => {
     const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
+    const year = date.getFullYear().toString(); // Full year (2026)
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    const random = Math.floor(1000 + Math.random() * 9000); // 4-digit random number
-    return `BILL-${year}${month}${day}-${random}`;
+    
+    // Get next sequential number
+    const today = `${day}${month}${year}`;
+    const lastBillNumber = localStorage.getItem(`lastBillNumber_${today}`) || '000';
+    const nextNumber = String(parseInt(lastBillNumber) + 1).padStart(3, '0');
+    
+    // Save the new number for today
+    localStorage.setItem(`lastBillNumber_${today}`, nextNumber);
+    
+    // Use DDMMYYYYNNN format (without BILL- prefix)
+    return `${day}${month}${year}${nextNumber}`;
+  };
+
+  // Function to check bill number format and normalize it
+  const normalizeBillNumber = (billNumber) => {
+    // If it's the new format (DDMMYYYYNNN), return as is
+    if (/^\d{8}\d{3}$/.test(billNumber)) {
+      return billNumber;
+    }
+    // If it's the old format (BILL-YYMMDD-NNNN), convert to new format
+    if (/^BILL-\d{2}\d{2}\d{2}-\d{4}$/.test(billNumber)) {
+      const match = billNumber.match(/^BILL-(\d{2})(\d{2})(\d{2})-(\d{4})$/);
+      if (match) {
+        const year = match[1];
+        const month = match[2];
+        const day = match[3];
+        const number = match[4];
+        // Convert YY to full year (assuming 2000s)
+        const fullYear = year.startsWith('0') ? `20${year}` : year;
+        return `${day}${month}${fullYear}${number}`;
+      }
+    }
+    return billNumber;
   };
 
   const [openBills, setOpenBills] = useState(() => {
+    // Clear localStorage to ensure new bill number format
     try {
-      const savedBills = localStorage.getItem('billing_openBills_v1');
-      if (savedBills) {
-        const parsed = JSON.parse(savedBills);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Ensure each bill has a billNumber
-          return parsed.map(bill => ({
-            ...bill,
-            billNumber: bill.billNumber || generateBillNumber()
-          }));
-        }
-      }
+      localStorage.removeItem('billing_openBills_v1');
+      localStorage.removeItem('billing_tabIndex_v1');
     } catch (e) {
-      console.error('Failed to parse saved bills from localStorage:', e);
+      console.error('Failed to clear localStorage:', e);
     }
+    
     return [{
       id: Date.now(),
       billNumber: generateBillNumber(),
@@ -201,6 +225,102 @@ useEffect(() => {
   useEffect(() => {
     fetchBillHistory();
   }, [dateFilter]);
+
+  // Upload all bills from backup to server
+  const uploadAllBills = async () => {
+    try {
+      const backupBills = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
+      
+      if (backupBills.length === 0) {
+        alert('No bills in backup to upload.');
+        return;
+      }
+
+      console.log(`Starting upload of ${backupBills.length} bills...`);
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const backupBill of backupBills) {
+        try {
+          // Check if bill already exists on server
+          const checkResponse = await fetch(`https://billing-server-gaha.onrender.com/api/bills?billNumber=${backupBill.billNumber}`);
+          
+          if (checkResponse.ok) {
+            const existingBills = await checkResponse.json();
+            
+            if (existingBills.length === 0) {
+              // Bill not found on server, upload it
+              const uploadResponse = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(backupBill)
+              });
+              
+              if (uploadResponse.ok) {
+                successCount++;
+                console.log(`✅ Uploaded bill: ${backupBill.billNumber}`);
+              } else {
+                failCount++;
+                console.error(`❌ Failed to upload bill: ${backupBill.billNumber}`);
+              }
+            } else {
+              console.log(`⏭️ Bill already exists: ${backupBill.billNumber}`);
+            }
+          }
+        } catch (error) {
+          failCount++;
+          console.error(`❌ Error uploading bill ${backupBill.billNumber}:`, error);
+        }
+        
+        // Small delay to avoid overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      alert(`Upload Complete!\n✅ Success: ${successCount} bills\n❌ Failed: ${failCount} bills\nCheck console for details.`);
+      
+      // Refresh bill history after upload
+      await fetchBillHistory();
+      
+    } catch (error) {
+      console.error('Failed to upload bills:', error);
+      alert('Error uploading bills. Check console for details.');
+    }
+  };
+
+  // Sync any missed bills from backup to server
+  const syncMissedBills = async () => {
+    try {
+      const backupBills = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
+      
+      for (const backupBill of backupBills) {
+        try {
+          // Check if bill already exists on server
+          const checkResponse = await fetch(`https://billing-server-gaha.onrender.com/api/bills?billNumber=${backupBill.billNumber}`);
+          
+          if (!checkResponse.ok || (await checkResponse.json()).length === 0) {
+            // Bill not found on server, upload it
+            const uploadResponse = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(backupBill)
+            });
+            
+            if (uploadResponse.ok) {
+              console.log('Synced missed bill:', backupBill.billNumber);
+            }
+          }
+        } catch (syncError) {
+          console.error('Failed to sync bill:', backupBill.billNumber, syncError);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to sync missed bills:', error);
+    }
+  };
+
+  useEffect(() => {
+    syncMissedBills();
+  }, []);
 
   // Keep application active with periodic server requests
   useEffect(() => {
@@ -597,6 +717,26 @@ useEffect(() => {
       setProducts(await productsResponse.json());
       await fetchBillHistory();
 
+      // Bill successfully saved - create local backup
+      const savedBill = {
+        ...requestBody,
+        _id: responseData._id || responseData.bill?._id,
+        billNumber: bill.billNumber,
+        createdAt: new Date().toISOString(),
+        grandTotal: calculateTotal(bill),
+        savedAt: new Date().toISOString()
+      };
+
+      // Save to localStorage as backup
+      try {
+        const existingBackups = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
+        existingBackups.push(savedBill);
+        localStorage.setItem('billing_savedBills_backup', JSON.stringify(existingBackups));
+        console.log('Bill saved locally as backup:', savedBill.billNumber);
+      } catch (backupError) {
+        console.error('Failed to save local backup:', backupError);
+      }
+
       const now = new Date();
       const date = now.toLocaleDateString('ta-IN');
       const time = now.toLocaleTimeString('ta-IN');
@@ -847,6 +987,26 @@ useEffect(() => {
       const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
       setProducts(await productsResponse.json());
       await fetchBillHistory();
+
+      // Bill successfully saved - create local backup
+      const savedBill = {
+        ...requestBody,
+        _id: responseData._id || responseData.bill?._id,
+        billNumber: bill.billNumber,
+        createdAt: new Date().toISOString(),
+        grandTotal: calculateTotal(bill),
+        savedAt: new Date().toISOString()
+      };
+
+      // Save to localStorage as backup
+      try {
+        const existingBackups = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
+        existingBackups.push(savedBill);
+        localStorage.setItem('billing_savedBills_backup', JSON.stringify(existingBackups));
+        console.log('Bill saved locally as backup:', savedBill.billNumber);
+      } catch (backupError) {
+        console.error('Failed to save local backup:', backupError);
+      }
 
       const now = new Date();
       const date = now.toLocaleDateString('ta-IN');
@@ -1331,13 +1491,20 @@ const editBill = (bill) => {
             <div className="card">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h4>Bill History</h4>
-                <div>
+                <div className="d-flex gap-2">
                   <input 
                     type="date" 
                     className="form-control" 
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
                   />
+                  <button 
+                    className="btn btn-success btn-sm"
+                    onClick={uploadAllBills}
+                    title="Upload all bills from backup to server"
+                  >
+                    Upload All Bills
+                  </button>
                 </div>
               </div>
               <div className="card-body">
@@ -1386,7 +1553,7 @@ const editBill = (bill) => {
                         <tbody>
                           {billHistory.map((bill) => (
                             <tr key={bill._id}>
-                              <td>{bill.billNumber}</td>
+                              <td>{normalizeBillNumber(bill.billNumber)}</td>
                               <td>{new Date(bill.date).toLocaleString()}</td>
                               <td>{bill.items.length}</td>
                               <td>₹{(bill.grandTotal || 0).toFixed(2)}</td>
