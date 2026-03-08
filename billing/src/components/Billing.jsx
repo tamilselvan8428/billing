@@ -1626,8 +1626,8 @@ const BillForm = ({
               </tr>
             ))}
             <tr>
-              <td colSpan="6" className="text-end"><strong>Grand Total:</strong></td>
-              <td colSpan="2"><strong>₹{calculateTotal(bill).toFixed(2)}</strong></td>
+              <td colSpan="6" className="text-end"><strong style={{fontSize: '18px', fontWeight: 'bold'}}>Grand Total:</strong></td>
+              <td colSpan="2"><strong style={{fontSize: '18px', fontWeight: 'bold'}}>₹{calculateTotal(bill).toFixed(2)}</strong></td>
             </tr>
           </tbody>
         </table>
