@@ -7,11 +7,16 @@ import StockManagement from './components/StockManagement';
 function App() {
   const [activeTab, setActiveTab] = useState('billing');
 
-  // Keep-alive mechanism to prevent session timeouts
+  // Keep-alive mechanism to prevent Render server from sleeping
   useEffect(() => {
     const keepAliveInterval = setInterval(async () => {
       try {
-        await fetch('/api/keep-alive', {
+        // Use full URL in production, relative path in development
+        const baseUrl = import.meta.env.PROD 
+          ? 'http://billing-server-gaha.onrender.com' 
+          : '';
+        
+        await fetch(`${baseUrl}/api/keep-alive`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -20,9 +25,8 @@ function App() {
       } catch (error) {
         console.log('Keep-alive failed:', error);
       }
-    }, 5 * 60 * 1000); // Ping every 5 minutes
+    }, 14 * 60 * 1000); // Ping every 14 minutes (Render sleeps after 15)
 
-    // Cleanup interval on component unmount
     return () => clearInterval(keepAliveInterval);
   }, []);
 
