@@ -6,12 +6,9 @@ import StockManagement from './components/StockManagement';
 
 function App() {
   const [activeTab, setActiveTab] = useState('billing');
-
-  // Enhanced keep-alive mechanism to prevent Render server from sleeping
   useEffect(() => {
     const keepAliveInterval = setInterval(async () => {
       try {
-        // Use HTTPS in production for secure connection
         const baseUrl = import.meta.env.PROD 
           ? 'https://billing-server-gaha.onrender.com' 
           : '';

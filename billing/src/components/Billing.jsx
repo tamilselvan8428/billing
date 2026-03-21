@@ -162,6 +162,7 @@ const Billing = () => {
     requestQueue.current.push(request);
     processQueue();
   };
+  // Helper function to fetch with retry for 429 errors and rate limiting protection
   const fetchWithRetry = async (url, options = {}, retries = 5, delay = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
@@ -338,10 +339,12 @@ useEffect(() => {
   const refreshAllData = async () => {
     console.log('🔄 Manual refresh triggered...');
     setLastDataFetch(0); // Reset cache to force refresh
-    await loadAllDataSimultaneously();
+    await loadAllDataBalanced();
   };
+  
+  // Call balanced loading function when component mounts
   useEffect(() => {
-    loadAllDataSimultaneously();
+    loadAllDataBalanced();
   }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
