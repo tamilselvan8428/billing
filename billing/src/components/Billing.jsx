@@ -67,14 +67,20 @@ const Billing = () => {
   };
 
   const [openBills, setOpenBills] = useState(() => {
-    // Clear localStorage to ensure new bill number format
+    // Try to load saved bills from localStorage first
     try {
-      localStorage.removeItem('billing_openBills_v1');
-      localStorage.removeItem('billing_tabIndex_v1');
+      const savedBills = localStorage.getItem('billing_openBills_v1');
+      if (savedBills) {
+        const parsedBills = JSON.parse(savedBills);
+        if (parsedBills && parsedBills.length > 0) {
+          return parsedBills;
+        }
+      }
     } catch (e) {
-      console.error('Failed to clear localStorage:', e);
+      console.error('Failed to load saved bills:', e);
     }
     
+    // Only create new bill if no saved bills found
     return [{
       id: Date.now(),
       billNumber: generateBillNumber(),
@@ -142,9 +148,23 @@ const Billing = () => {
     try {
       localStorage.setItem('billing_openBills_v1', JSON.stringify(openBills));
       localStorage.setItem('billing_tabIndex_v1', String(tabIndex));
+      console.log('💾 Bills saved to localStorage');
     } catch (e) {
-      console.error('Failed to persist bill state:', e);
+      console.error('Failed to save bills to localStorage:', e);
     }
+  }, [openBills, tabIndex]);
+
+  // Ensure bills persist when component unmounts (navigation)
+  useEffect(() => {
+    return () => {
+      try {
+        // Save current state before unmounting
+        localStorage.setItem('billing_openBills_v1', JSON.stringify(openBills));
+        localStorage.setItem('billing_tabIndex_v1', String(tabIndex));
+      } catch (e) {
+        console.error('Failed to save bills on unmount:', e);
+      }
+    };
   }, [openBills, tabIndex]);
 
   // Add F2 key listener for printing
