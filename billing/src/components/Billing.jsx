@@ -133,7 +133,28 @@ const Billing = () => {
   const quantityRefs = useRef([]);
   const dropdownRefs = useRef(null);
 
-  // Update bill state helper function
+  // Helper function to fetch with retry for 429 errors
+  const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, options);
+        if (response.status === 429) {
+          if (i === retries - 1) {
+            throw new Error('Server busy - please try again later');
+          }
+          console.log(`⏳ Rate limited, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+          continue;
+        }
+        return response;
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        console.log(`❌ Request failed, retrying... (${error.message})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  };
   const updateBillState = (billId, updates) => {
     setOpenBills(prevBills => 
       prevBills.map(bill => 
@@ -222,26 +243,37 @@ useEffect(() => {
       try {
         setLoadingProducts(true);
         
-        // Load all data in parallel for faster loading
-        const [productsRes, contactsRes, historyRes, summaryRes] = await Promise.all([
-          fetch('https://billing-server-gaha.onrender.com/api/products'),
-          fetch('https://billing-server-gaha.onrender.com/api/contacts'),
-          fetch(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`),
-          fetch(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`)
-        ]);
-        
-        // Process responses in parallel
-        const [productsData, contactsData, historyData, summaryData] = await Promise.all([
-          productsRes.ok ? productsRes.json() : Promise.reject(new Error('Products fetch failed')),
-          contactsRes.ok ? contactsRes.json() : Promise.resolve({ contacts: [] }),
-          historyRes.ok ? historyRes.json() : Promise.resolve({ bills: [] }),
-          summaryRes.ok ? summaryRes.json() : Promise.resolve({ summary: {} })
-        ]);
-        
-        // Update all states at once
+        // Fetch data sequentially to avoid rate limiting (429 errors)
+        console.log('🔄 Fetching products...');
+        const productsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/products');
+        if (!productsRes.ok) {
+          throw new Error('Products fetch failed');
+        }
+        const productsData = await productsRes.json();
         setProducts(productsData || []);
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        console.log('🔄 Fetching contacts...');
+        const contactsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts');
+        const contactsData = contactsRes.ok ? await contactsRes.json() : { contacts: [] };
         setSavedContacts(contactsData.contacts || []);
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        console.log('🔄 Fetching bill history...');
+        const historyRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`);
+        const historyData = historyRes.ok ? await historyRes.json() : { bills: [] };
         setBillHistory(historyData.bills || []);
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        console.log('🔄 Fetching summary...');
+        const summaryRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`);
+        const summaryData = summaryRes.ok ? await summaryRes.json() : { summary: {} };
         setDailySummary({
           totalAmount: summaryData.summary?.totalAmount || 0,
           billCount: summaryData.summary?.billCount || 0,
@@ -250,10 +282,11 @@ useEffect(() => {
         
         // Update cache timestamp
         setLastDataFetch(now);
+        console.log('✅ All data loaded successfully');
         
       } catch (err) {
         console.error('Error fetching initial data:', err);
-        setError('Failed to load data. Please try again later.');
+        setError(err.message || 'Failed to load data. Please try again later.');
       } finally {
         setLoadingProducts(false);
       }
@@ -374,14 +407,8 @@ useEffect(() => {
     syncMissedBills();
   }, []);
 
-  // Keep application active with periodic server requests
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetch("https://billing-server-gaha.onrender.com");
-    }, 300000); // 5 minutes
-
-    return () => clearInterval(interval);
-  }, []);
+  // Removed duplicate keep-alive to prevent rate limiting
+  // Keep-alive is already handled in App.jsx every 14 minutes
 
   const loadSavedContacts = async () => {
     try {
@@ -755,7 +782,7 @@ useEffect(() => {
           requestBody.billNumber = bill.billNumber;
         }
       
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -978,7 +1005,7 @@ useEffect(() => {
           requestBody.billNumber = bill.billNumber;
         }
       
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
