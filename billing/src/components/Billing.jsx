@@ -687,35 +687,28 @@ useEffect(() => {
   };
 
   const resetForm = (billId) => {
-    const bill = openBills.find(b => b.id === billId);
-    const hasItems = bill.billItems.some(item => item.productId && item.quantity);
+    // Clear the bill without confirmation
+    updateBillState(billId, {
+      billItems: [{ 
+        productId: '', 
+        quantity: '', 
+        productName: '', 
+        productNameTamil: '',
+        price: 0,
+        productSearch: ''
+      }],
+      activeRow: 0,
+      activeField: 'productSearch',
+      productSearch: '',
+      showProductDropdown: false
+    });
     
-    if (hasItems) {
-      const shouldClear = window.confirm('Are you sure you want to clear this bill? This action cannot be undone.');
-      if (shouldClear) {
-        updateBillState(billId, {
-          billItems: [{ 
-            productId: '', 
-            quantity: '', 
-            productName: '', 
-            productNameTamil: '',
-            price: 0,
-            productSearch: ''
-          }],
-          activeRow: 0,
-          activeField: 'productSearch',
-          productSearch: '',
-          showProductDropdown: false
-        });
-        
-        // Auto-focus on the first product search field after clearing
-        setTimeout(() => {
-          if (productSearchRefs.current[0]) {
-            productSearchRefs.current[0].focus();
-          }
-        }, 100);
+    // Auto-focus on the first product search field after clearing
+    setTimeout(() => {
+      if (productSearchRefs.current[0]) {
+        productSearchRefs.current[0].focus();
       }
-    }
+    }, 100);
   };
 
   const handleDirectPrint = async (billId) => {
@@ -902,7 +895,19 @@ useEffect(() => {
         iframe.contentWindow.print();
         document.body.removeChild(iframe);
         updateBillState(billId, {
-          isPrinting: false
+          isPrinting: false,
+          billItems: [{ 
+            productId: '', 
+            quantity: '', 
+            productName: '', 
+            productNameTamil: '',
+            price: 0,
+            productSearch: ''
+          }],
+          activeRow: 0,
+          activeField: 'productSearch',
+          productSearch: '',
+          showProductDropdown: false
         });
       }, 200);
       
@@ -1155,7 +1160,19 @@ useEffect(() => {
           printWindow.print();
           printWindow.close();
           updateBillState(billId, {
-            isPrinting: false
+            isPrinting: false,
+            billItems: [{ 
+              productId: '', 
+              quantity: '', 
+              productName: '', 
+              productNameTamil: '',
+              price: 0,
+              productSearch: ''
+            }],
+            activeRow: 0,
+            activeField: 'productSearch',
+            productSearch: '',
+            showProductDropdown: false
           });
         }, 200);
       };
@@ -1795,7 +1812,7 @@ const BillForm = ({
           onClick={onClearBill}
           disabled={bill.billItems.length === 1 && !bill.billItems[0].productId && !bill.billItems[0].quantity}
         >
-          Clear Bill (F6)
+          Clear Bill
         </button>
         <div>
           <button 
