@@ -260,71 +260,85 @@ useEffect(() => {
 }, [openBills, tabIndex]);
 
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      // Skip if data was fetched recently (within 5 minutes)
-      const now = Date.now();
-      if (lastDataFetch && (now - lastDataFetch) < 5 * 60 * 1000) {
-        console.log('Using cached data');
-        return;
-      }
+  // Async function to load all data simultaneously
+  const loadAllDataSimultaneously = async () => {
+    // Skip if data was fetched recently (within 5 minutes)
+    const now = Date.now();
+    if (lastDataFetch && (now - lastDataFetch) < 5 * 60 * 1000) {
+      console.log('Using cached data');
+      return;
+    }
 
-      try {
-        setLoadingProducts(true);
-        
-        // Fetch data sequentially to avoid rate limiting (429 errors)
-        console.log('🔄 Fetching products...');
-        const productsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/products');
-        if (!productsRes.ok) {
-          throw new Error('Products fetch failed');
-        }
-        const productsData = await productsRes.json();
+    try {
+      setLoadingProducts(true);
+      
+      // Load all data simultaneously for faster loading
+      console.log('🔄 Loading all data simultaneously...');
+      const [productsRes, contactsRes, historyRes, summaryRes] = await Promise.allSettled([
+        fetchWithRetry('https://billing-server-gaha.onrender.com/api/products'),
+        fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts'),
+        fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`),
+        fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`)
+      ]);
+      
+      // Process all results
+      if (productsRes.status === 'fulfilled' && productsRes.value.ok) {
+        const productsData = await productsRes.value.json();
         setProducts(productsData || []);
-        
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        console.log('🔄 Fetching contacts...');
-        const contactsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts');
-        const contactsData = contactsRes.ok ? await contactsRes.json() : { contacts: [] };
+        console.log('✅ Products loaded');
+      } else {
+        console.log('❌ Products failed to load');
+      }
+      
+      if (contactsRes.status === 'fulfilled' && contactsRes.value.ok) {
+        const contactsData = await contactsRes.value.json();
         setSavedContacts(contactsData.contacts || []);
-        
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        console.log('🔄 Fetching bill history...');
-        const historyRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`);
-        const historyData = historyRes.ok ? await historyRes.json() : { bills: [] };
+        console.log('✅ Contacts loaded');
+      } else {
+        console.log('❌ Contacts failed to load');
+      }
+      
+      if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
+        const historyData = await historyRes.value.json();
         setBillHistory(historyData.bills || []);
-        
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        console.log('🔄 Fetching summary...');
-        const summaryRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`);
-        const summaryData = summaryRes.ok ? await summaryRes.json() : { summary: {} };
+        console.log('✅ Bill history loaded');
+      } else {
+        console.log('❌ Bill history failed to load');
+      }
+      
+      if (summaryRes.status === 'fulfilled' && summaryRes.value.ok) {
+        const summaryData = await summaryRes.value.json();
         setDailySummary({
           totalAmount: summaryData.summary?.totalAmount || 0,
           billCount: summaryData.summary?.billCount || 0,
           averageBill: summaryData.summary?.averageBill || 0
         });
-        
-        // Update cache timestamp
-        setLastDataFetch(now);
-        console.log('✅ All data loaded successfully');
-        
-      } catch (err) {
-        console.error('Error fetching initial data:', err);
-        setError(err.message || 'Failed to load data. Please try again later.');
-      } finally {
-        setLoadingProducts(false);
+        console.log('✅ Summary loaded');
+      } else {
+        console.log('❌ Summary failed to load');
       }
-    };
+      
+      // Update cache timestamp
+      setLastDataFetch(now);
+      console.log('✅ All data loading completed');
+      
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError(err.message || 'Failed to load data. Please try again later.');
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
 
-    fetchInitialData();
+  // Manual refresh function to reload all data
+  const refreshAllData = async () => {
+    console.log('🔄 Manual refresh triggered...');
+    setLastDataFetch(0); // Reset cache to force refresh
+    await loadAllDataSimultaneously();
+  };
+  useEffect(() => {
+    loadAllDataSimultaneously();
   }, []);
-
-  // Auto-focus on the first product search field when component loads or switching tabs
   useEffect(() => {
     const timer = setTimeout(() => {
       const activeBill = openBills[tabIndex];
