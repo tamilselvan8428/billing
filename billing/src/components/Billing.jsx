@@ -667,12 +667,34 @@ useEffect(() => {
   };
 
   const resetForm = (billId) => {
-    // Only show confirmation, don't clear the bill
     const bill = openBills.find(b => b.id === billId);
     const hasItems = bill.billItems.some(item => item.productId && item.quantity);
     
     if (hasItems) {
-      alert('Bill will be cleared only when printed. Press F2 or F3 to print the bill.');
+      const shouldClear = window.confirm('Are you sure you want to clear this bill? This action cannot be undone.');
+      if (shouldClear) {
+        updateBillState(billId, {
+          billItems: [{ 
+            productId: '', 
+            quantity: '', 
+            productName: '', 
+            productNameTamil: '',
+            price: 0,
+            productSearch: ''
+          }],
+          activeRow: 0,
+          activeField: 'productSearch',
+          productSearch: '',
+          showProductDropdown: false
+        });
+        
+        // Auto-focus on the first product search field after clearing
+        setTimeout(() => {
+          if (productSearchRefs.current[0]) {
+            productSearchRefs.current[0].focus();
+          }
+        }, 100);
+      }
     }
   };
 
@@ -732,9 +754,6 @@ useEffect(() => {
         throw new Error(responseData.message || 'Failed to create bill');
       }
 
-      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
-      setProducts(await productsResponse.json());
-
       // Bill successfully saved - create local backup
       const savedBill = {
         ...requestBody,
@@ -756,9 +775,7 @@ useEffect(() => {
       }
 
       const now = new Date();
-      const date = now.toLocaleDateString('ta-IN');
-      const time = now.toLocaleTimeString('ta-IN');
-
+      
       // Create iframe for direct printing
       const iframe = document.createElement('iframe');
       iframe.style.position = 'absolute';
@@ -769,6 +786,11 @@ useEffect(() => {
       document.body.appendChild(iframe);
 
       const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      
+      // Pre-calculate all values to avoid repeated calculations
+      const total = calculateTotal(bill);
+      const date = now.toLocaleDateString('ta-IN');
+      const time = now.toLocaleTimeString('ta-IN');
       
       const billContent = `
         <!DOCTYPE html>
@@ -786,62 +808,17 @@ useEffect(() => {
                 font-size: 14px;
                 line-height: 1.2;
               }
-              .header { 
-                text-align: center; 
-                margin-bottom: 2mm; 
-              }
-              .shop-name { 
-                font-weight: bold; 
-                font-size: 16px; 
-                margin: 0; 
-              }
-              .bill-title { 
-                font-weight: bold; 
-                font-size: 15px; 
-                margin: 1px 0; 
-              }
-              .contact { 
-                font-size: 12px; 
-                margin: 1px 0 2px 0; 
-              }
-              .customer-info { 
-                margin-bottom: 2mm;
-                display: flex;
-                justify-content: space-between;
-              }
-              .customer-details {
-                text-align: left;
-              }
-              .date-time {
-                text-align: right;
-              }
-              table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                margin-bottom: 2mm; 
-              }
-              th, td { 
-                padding: 2mm 0; 
-                text-align: left; 
-              }
-              th { 
-                border-bottom: 1px dashed #000; 
-              }
-              .item-row td { 
-                border-bottom: 1px dashed #ddd; 
-                padding: 2mm 0; 
-              }
-              .total-row { 
-                font-weight: bold; 
-                border-top: 1px dashed #000; 
-                border-bottom: 1px dashed #000; 
-                font-size: 16px;
-              }
-              .footer { 
-                text-align: center; 
-                margin-top: 2mm; 
-                font-size: 12px; 
-              }
+              .header { text-align: center; margin-bottom: 2mm; }
+              .shop-name { font-weight: bold; font-size: 16px; margin: 0; }
+              .bill-title { font-weight: bold; font-size: 15px; margin: 1px 0; }
+              .contact { font-size: 12px; margin: 1px 0 2px 0; }
+              .customer-info { margin-bottom: 2mm; display: flex; justify-content: space-between; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
+              th, td { padding: 2mm 0; text-align: left; }
+              th { border-bottom: 1px dashed #000; }
+              .item-row td { border-bottom: 1px dashed #ddd; padding: 2mm 0; }
+              .total-row { font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-size: 16px; }
+              .footer { text-align: center; margin-top: 2mm; font-size: 12px; }
             </style>
           </head>
           <body>
@@ -852,10 +829,8 @@ useEffect(() => {
             </div>
             
             <div class="customer-info">
-              <div class="customer-details">
-                <div>பில் எண்: ${bill.billNumber}</div>
-              </div>
-              <div class="date-time">
+              <div>பில் எண்: ${bill.billNumber}</div>
+              <div>
                 <div>தேதி: ${date}</div>
                 <div>நேரம்: ${time}</div>
               </div>
@@ -887,7 +862,7 @@ useEffect(() => {
             <table>
               <tr class="total-row">
                 <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-                <td>₹${calculateTotal(bill).toFixed(2)}</td>
+                <td>₹${total.toFixed(2)}</td>
               </tr>
             </table>
             
@@ -907,21 +882,9 @@ useEffect(() => {
         iframe.contentWindow.print();
         document.body.removeChild(iframe);
         updateBillState(billId, {
-          isPrinting: false,
-          billItems: [{ 
-            productId: '', 
-            quantity: '', 
-            productName: '', 
-            productNameTamil: '',
-            price: 0,
-            productSearch: ''
-          }],
-          activeRow: 0,
-          activeField: 'productSearch',
-          productSearch: '',
-          showProductDropdown: false
+          isPrinting: false
         });
-      }, 500);
+      }, 200);
       
       // Auto-focus on the first product search field after printing
       setTimeout(() => {
@@ -1001,9 +964,6 @@ useEffect(() => {
       if (!response.ok) {
         throw new Error(responseData.message || 'Failed to create bill');
       }
-
-      const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
-      setProducts(await productsResponse.json());
 
       // Bill successfully saved - create local backup
       const savedBill = {
@@ -1175,19 +1135,7 @@ useEffect(() => {
           printWindow.print();
           printWindow.close();
           updateBillState(billId, {
-            isPrinting: false,
-            billItems: [{ 
-              productId: '', 
-              quantity: '', 
-              productName: '', 
-              productNameTamil: '',
-              price: 0,
-              productSearch: ''
-            }],
-            activeRow: 0,
-            activeField: 'productSearch',
-            productSearch: '',
-            showProductDropdown: false
+            isPrinting: false
           });
         }, 200);
       };
@@ -1361,7 +1309,7 @@ th {
             printWindow.print();
             printWindow.close();
             resolve();
-          }, 200);
+          }, 100);
         } catch (err) {
           printWindow.close();
           reject(err);
@@ -1827,7 +1775,7 @@ const BillForm = ({
           onClick={onClearBill}
           disabled={bill.billItems.length === 1 && !bill.billItems[0].productId && !bill.billItems[0].quantity}
         >
-          Clear Bill
+          Clear Bill (F6)
         </button>
         <div>
           <button 
