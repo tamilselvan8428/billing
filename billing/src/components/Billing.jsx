@@ -114,13 +114,14 @@ const Billing = () => {
     averageBill: 0
   });
   
-  // Shared state
+  // Shared state with caching
   const [products, setProducts] = useState([]);
   const [savedContacts, setSavedContacts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [error, setError] = useState(null);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [lastDataFetch, setLastDataFetch] = useState(null);
 
   const productSearchRefs = useRef([]);
   const quantityRefs = useRef([]);
@@ -191,6 +192,13 @@ useEffect(() => {
 
   useEffect(() => {
     const fetchInitialData = async () => {
+      // Skip if data was fetched recently (within 5 minutes)
+      const now = Date.now();
+      if (lastDataFetch && (now - lastDataFetch) < 5 * 60 * 1000) {
+        console.log('Using cached data');
+        return;
+      }
+
       try {
         setLoadingProducts(true);
         
@@ -219,6 +227,9 @@ useEffect(() => {
           billCount: summaryData.summary?.billCount || 0,
           averageBill: summaryData.summary?.averageBill || 0
         });
+        
+        // Update cache timestamp
+        setLastDataFetch(now);
         
       } catch (err) {
         console.error('Error fetching initial data:', err);
