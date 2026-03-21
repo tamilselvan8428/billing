@@ -133,25 +133,54 @@ const Billing = () => {
   const quantityRefs = useRef([]);
   const dropdownRefs = useRef(null);
 
-  // Helper function to fetch with retry for 429 errors
-  const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000) => {
+  // Request queue to prevent overwhelming the server
+  const requestQueue = useRef([]);
+  const isProcessingQueue = useRef(false);
+
+  const processQueue = async () => {
+    if (isProcessingQueue.current || requestQueue.current.length === 0) {
+      return;
+    }
+
+    isProcessingQueue.current = true;
+    
+    while (requestQueue.current.length > 0) {
+      const request = requestQueue.current.shift();
+      try {
+        await request();
+        // Add delay between queue items
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (error) {
+        console.error('Queue request failed:', error);
+      }
+    }
+    
+    isProcessingQueue.current = false;
+  };
+
+  const addToQueue = (request) => {
+    requestQueue.current.push(request);
+    processQueue();
+  };
+  const fetchWithRetry = async (url, options = {}, retries = 5, delay = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
         const response = await fetch(url, options);
         if (response.status === 429) {
           if (i === retries - 1) {
-            throw new Error('Server busy - please try again later');
+            throw new Error('Server busy - please try again in a moment');
           }
-          console.log(`⏳ Rate limited, retrying in ${delay}ms...`);
+          console.log(`⏳ Rate limited, retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // Exponential backoff
+          delay *= 1.5; // More conservative backoff
           continue;
         }
         return response;
       } catch (error) {
         if (i === retries - 1) throw error;
-        console.log(`❌ Request failed, retrying... (${error.message})`);
+        console.log(`❌ Request failed, retrying in ${delay}ms... (${error.message})`);
         await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5;
       }
     }
   };
@@ -253,7 +282,7 @@ useEffect(() => {
         setProducts(productsData || []);
         
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         console.log('🔄 Fetching contacts...');
         const contactsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts');
@@ -261,7 +290,7 @@ useEffect(() => {
         setSavedContacts(contactsData.contacts || []);
         
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         console.log('🔄 Fetching bill history...');
         const historyRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`);
@@ -269,7 +298,7 @@ useEffect(() => {
         setBillHistory(historyData.bills || []);
         
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         console.log('🔄 Fetching summary...');
         const summaryRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`);
@@ -407,8 +436,18 @@ useEffect(() => {
     syncMissedBills();
   }, []);
 
-  // Removed duplicate keep-alive to prevent rate limiting
-  // Keep-alive is already handled in App.jsx every 14 minutes
+  // Backup keep-alive mechanism (additional safety)
+  useEffect(() => {
+    const backupKeepAlive = setInterval(async () => {
+      try {
+        await fetchWithRetry('https://billing-server-gaha.onrender.com/api/health', {}, 2, 1000);
+      } catch (error) {
+        // Silent fail for backup keep-alive
+      }
+    }, 13 * 60 * 1000); // 13 minutes (different from main keep-alive)
+
+    return () => clearInterval(backupKeepAlive);
+  }, []);
 
   const loadSavedContacts = async () => {
     try {

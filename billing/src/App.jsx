@@ -7,7 +7,7 @@ import StockManagement from './components/StockManagement';
 function App() {
   const [activeTab, setActiveTab] = useState('billing');
 
-  // Keep-alive mechanism to prevent Render server from sleeping
+  // Enhanced keep-alive mechanism to prevent Render server from sleeping
   useEffect(() => {
     const keepAliveInterval = setInterval(async () => {
       try {
@@ -16,16 +16,39 @@ function App() {
           ? 'http://billing-server-gaha.onrender.com' 
           : '';
         
-        await fetch(`${baseUrl}/api/keep-alive`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        // Multiple keep-alive strategies for maximum reliability
+        const promises = [
+          fetch(`${baseUrl}/api/keep-alive`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          fetch(`${baseUrl}/api/health`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          })
+        ];
+        
+        await Promise.allSettled(promises);
+        console.log('💓 Keep-alive ping sent successfully');
       } catch (error) {
         console.log('Keep-alive failed:', error);
       }
-    }, 14 * 60 * 1000); // Ping every 14 minutes (Render sleeps after 15)
+    }, 10 * 60 * 1000); // Ping every 10 minutes (more frequent for safety)
+
+    // Also ping immediately when app loads
+    const initialPing = async () => {
+      try {
+        const baseUrl = import.meta.env.PROD 
+          ? 'http://billing-server-gaha.onrender.com' 
+          : '';
+        await fetch(`${baseUrl}/api/keep-alive`);
+        console.log('🚀 Initial keep-alive sent');
+      } catch (error) {
+        console.log('Initial keep-alive failed:', error);
+      }
+    };
+    
+    initialPing();
 
     return () => clearInterval(keepAliveInterval);
   }, []);
