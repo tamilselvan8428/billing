@@ -190,24 +190,45 @@ useEffect(() => {
 
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchInitialData = async () => {
       try {
         setLoadingProducts(true);
-        const response = await fetch('https://billing-server-gaha.onrender.com/api/products');
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        setProducts(data || []);
+        
+        // Load all data in parallel for faster loading
+        const [productsRes, contactsRes, historyRes, summaryRes] = await Promise.all([
+          fetch('https://billing-server-gaha.onrender.com/api/products'),
+          fetch('https://billing-server-gaha.onrender.com/api/contacts'),
+          fetch(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`),
+          fetch(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`)
+        ]);
+        
+        // Process responses in parallel
+        const [productsData, contactsData, historyData, summaryData] = await Promise.all([
+          productsRes.ok ? productsRes.json() : Promise.reject(new Error('Products fetch failed')),
+          contactsRes.ok ? contactsRes.json() : Promise.resolve({ contacts: [] }),
+          historyRes.ok ? historyRes.json() : Promise.resolve({ bills: [] }),
+          summaryRes.ok ? summaryRes.json() : Promise.resolve({ summary: {} })
+        ]);
+        
+        // Update all states at once
+        setProducts(productsData || []);
+        setSavedContacts(contactsData.contacts || []);
+        setBillHistory(historyData.bills || []);
+        setDailySummary({
+          totalAmount: summaryData.summary?.totalAmount || 0,
+          billCount: summaryData.summary?.billCount || 0,
+          averageBill: summaryData.summary?.averageBill || 0
+        });
+        
       } catch (err) {
-        console.error('Error fetching products:', err);
-        setError('Failed to load products. Please try again later.');
+        console.error('Error fetching initial data:', err);
+        setError('Failed to load data. Please try again later.');
       } finally {
         setLoadingProducts(false);
       }
     };
 
-    fetchProducts();
-    loadSavedContacts();
-    fetchBillHistory();
+    fetchInitialData();
   }, []);
 
   // Auto-focus on the first product search field when component loads or switching tabs
@@ -635,26 +656,13 @@ useEffect(() => {
   };
 
   const resetForm = (billId) => {
-    updateBillState(billId, {
-      billItems: [{ 
-        productId: '', 
-        quantity: '', 
-        productName: '', 
-        productNameTamil: '',
-        price: 0,
-        productSearch: ''
-      }],
-      activeRow: 0,
-      activeField: 'productSearch',
-      productSearch: ''
-    });
+    // Only show confirmation, don't clear the bill
+    const bill = openBills.find(b => b.id === billId);
+    const hasItems = bill.billItems.some(item => item.productId && item.quantity);
     
-    // Auto-focus on the first product search field after clearing
-    setTimeout(() => {
-      if (productSearchRefs.current[0]) {
-        productSearchRefs.current[0].focus();
-      }
-    }, 100);
+    if (hasItems) {
+      alert('Bill will be cleared only when printed. Press F2 or F3 to print the bill.');
+    }
   };
 
   const handleDirectPrint = async (billId) => {
@@ -715,7 +723,6 @@ useEffect(() => {
 
       const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
       setProducts(await productsResponse.json());
-      await fetchBillHistory();
 
       // Bill successfully saved - create local backup
       const savedBill = {
@@ -986,7 +993,6 @@ useEffect(() => {
 
       const productsResponse = await fetch('https://billing-server-gaha.onrender.com/api/products');
       setProducts(await productsResponse.json());
-      await fetchBillHistory();
 
       // Bill successfully saved - create local backup
       const savedBill = {
@@ -1647,7 +1653,11 @@ const BillForm = ({
 
   return (
     <>
-      {loadingProducts && <div className="alert alert-info">Loading products...</div>}
+      {loadingProducts && (
+        <div className="alert alert-info text-center">
+          <strong>Loading billing system...</strong> Please wait while we fetch your data.
+        </div>
+      )}
       {error && <div className="alert alert-danger">{error}</div>}
       
       <div className="row mb-3">
