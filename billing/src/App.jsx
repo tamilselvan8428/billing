@@ -11,9 +11,9 @@ function App() {
   useEffect(() => {
     const keepAliveInterval = setInterval(async () => {
       try {
-        // Use full URL in production, relative path in development
+        // Use HTTPS in production for secure connection
         const baseUrl = import.meta.env.PROD 
-          ? 'http://billing-server-gaha.onrender.com' 
+          ? 'https://billing-server-gaha.onrender.com' 
           : '';
         
         // Multiple keep-alive strategies for maximum reliability
@@ -39,7 +39,7 @@ function App() {
     const initialPing = async () => {
       try {
         const baseUrl = import.meta.env.PROD 
-          ? 'http://billing-server-gaha.onrender.com' 
+          ? 'https://billing-server-gaha.onrender.com' 
           : '';
         await fetch(`${baseUrl}/api/keep-alive`);
         console.log('🚀 Initial keep-alive sent');
