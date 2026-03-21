@@ -260,8 +260,8 @@ useEffect(() => {
 }, [openBills, tabIndex]);
 
 
-  // Async function to load all data simultaneously
-  const loadAllDataSimultaneously = async () => {
+  // Async function to load all data with balanced approach (fast but safe)
+  const loadAllDataBalanced = async () => {
     // Skip if data was fetched recently (within 5 minutes)
     const now = Date.now();
     if (lastDataFetch && (now - lastDataFetch) < 5 * 60 * 1000) {
@@ -272,55 +272,59 @@ useEffect(() => {
     try {
       setLoadingProducts(true);
       
-      // Load all data simultaneously for faster loading
-      console.log('🔄 Loading all data simultaneously...');
-      const [productsRes, contactsRes, historyRes, summaryRes] = await Promise.allSettled([
-        fetchWithRetry('https://billing-server-gaha.onrender.com/api/products'),
-        fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts'),
-        fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`),
-        fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`)
-      ]);
+      // Load data in small batches to prevent server overload
+      console.log('🔄 Loading data in balanced batches...');
       
-      // Process all results
-      if (productsRes.status === 'fulfilled' && productsRes.value.ok) {
-        const productsData = await productsRes.value.json();
+      // Batch 1: Products (most important)
+      console.log('📦 Loading products...');
+      const productsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/products');
+      if (productsRes.ok) {
+        const productsData = await productsRes.json();
         setProducts(productsData || []);
         console.log('✅ Products loaded');
-      } else {
-        console.log('❌ Products failed to load');
       }
+      
+      // Small delay to prevent overwhelming server
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Batch 2: Contacts and History together
+      console.log('👥 Loading contacts and history...');
+      const [contactsRes, historyRes] = await Promise.allSettled([
+        fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts'),
+        fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`)
+      ]);
       
       if (contactsRes.status === 'fulfilled' && contactsRes.value.ok) {
         const contactsData = await contactsRes.value.json();
         setSavedContacts(contactsData.contacts || []);
         console.log('✅ Contacts loaded');
-      } else {
-        console.log('❌ Contacts failed to load');
       }
       
       if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
         const historyData = await historyRes.value.json();
         setBillHistory(historyData.bills || []);
         console.log('✅ Bill history loaded');
-      } else {
-        console.log('❌ Bill history failed to load');
       }
       
-      if (summaryRes.status === 'fulfilled' && summaryRes.value.ok) {
-        const summaryData = await summaryRes.value.json();
+      // Small delay before final batch
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Batch 3: Summary (least critical)
+      console.log('📊 Loading summary...');
+      const summaryRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`);
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
         setDailySummary({
           totalAmount: summaryData.summary?.totalAmount || 0,
           billCount: summaryData.summary?.billCount || 0,
           averageBill: summaryData.summary?.averageBill || 0
         });
         console.log('✅ Summary loaded');
-      } else {
-        console.log('❌ Summary failed to load');
       }
       
       // Update cache timestamp
       setLastDataFetch(now);
-      console.log('✅ All data loading completed');
+      console.log('✅ All data loaded successfully (balanced approach)');
       
     } catch (err) {
       console.error('Error loading data:', err);
