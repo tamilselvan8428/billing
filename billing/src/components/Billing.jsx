@@ -335,7 +335,33 @@ useEffect(() => {
     }
   };
 
-  // Manual refresh function to reload all data
+  // Delete bill function
+  const deleteBill = async (billId, billNumber) => {
+    if (!window.confirm(`Are you sure you want to delete bill ${billNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      console.log('🗑️ Deleting bill:', billId);
+      const response = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/${billId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete bill');
+      }
+
+      // Refresh bill history
+      await fetchBillHistory();
+      
+      console.log('✅ Bill deleted successfully');
+      alert('Bill deleted successfully!');
+      
+    } catch (error) {
+      console.error('Error deleting bill:', error);
+      alert('Failed to delete bill. Please try again.');
+    }
+  };
   const refreshAllData = async () => {
     console.log('🔄 Manual refresh triggered...');
     setLastDataFetch(0); // Reset cache to force refresh
@@ -373,103 +399,6 @@ useEffect(() => {
 
       console.log(`Starting upload of ${backupBills.length} bills...`);
       let successCount = 0;
-      let failCount = 0;
-
-      for (const backupBill of backupBills) {
-        try {
-          // Check if bill already exists on server
-          const checkResponse = await fetch(`https://billing-server-gaha.onrender.com/api/bills?billNumber=${backupBill.billNumber}`);
-          
-          if (checkResponse.ok) {
-            const existingBills = await checkResponse.json();
-            
-            if (existingBills.length === 0) {
-              // Bill not found on server, upload it
-              const uploadResponse = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(backupBill)
-              });
-              
-              if (uploadResponse.ok) {
-                successCount++;
-                console.log(`✅ Uploaded bill: ${backupBill.billNumber}`);
-              } else {
-                failCount++;
-                console.error(`❌ Failed to upload bill: ${backupBill.billNumber}`);
-              }
-            } else {
-              console.log(`⏭️ Bill already exists: ${backupBill.billNumber}`);
-            }
-          }
-        } catch (error) {
-          failCount++;
-          console.error(`❌ Error uploading bill ${backupBill.billNumber}:`, error);
-        }
-        
-        // Small delay to avoid overwhelming the server
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
-      alert(`Upload Complete!\n✅ Success: ${successCount} bills\n❌ Failed: ${failCount} bills\nCheck console for details.`);
-      
-      // Refresh bill history after upload
-      await fetchBillHistory();
-      
-    } catch (error) {
-      console.error('Failed to upload bills:', error);
-      alert('Error uploading bills. Check console for details.');
-    }
-  };
-
-  // Sync any missed bills from backup to server
-  const syncMissedBills = async () => {
-    try {
-      const backupBills = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
-      
-      for (const backupBill of backupBills) {
-        try {
-          // Check if bill already exists on server
-          const checkResponse = await fetch(`https://billing-server-gaha.onrender.com/api/bills?billNumber=${backupBill.billNumber}`);
-          
-          if (!checkResponse.ok || (await checkResponse.json()).length === 0) {
-            // Bill not found on server, upload it
-            const uploadResponse = await fetch('https://billing-server-gaha.onrender.com/api/bills', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(backupBill)
-            });
-            
-            if (uploadResponse.ok) {
-              console.log('Synced missed bill:', backupBill.billNumber);
-            }
-          }
-        } catch (syncError) {
-          console.error('Failed to sync bill:', backupBill.billNumber, syncError);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to sync missed bills:', error);
-    }
-  };
-
-  useEffect(() => {
-    syncMissedBills();
-  }, []);
-
-  // Backup keep-alive mechanism (additional safety)
-  useEffect(() => {
-    const backupKeepAlive = setInterval(async () => {
-      try {
-        await fetchWithRetry('https://billing-server-gaha.onrender.com/api/health', {}, 2, 1000);
-      } catch (error) {
-        // Silent fail for backup keep-alive
-      }
-    }, 13 * 60 * 1000); // 13 minutes (different from main keep-alive)
-
-    return () => clearInterval(backupKeepAlive);
-  }, []);
-
   const loadSavedContacts = async () => {
     try {
       const response = await fetch('https://billing-server-gaha.onrender.com/api/contacts');
@@ -854,25 +783,8 @@ useEffect(() => {
         throw new Error(responseData.message || 'Failed to create bill');
       }
 
-      // Bill successfully saved - create local backup
-      const savedBill = {
-        ...requestBody,
-        _id: responseData._id || responseData.bill?._id,
-        billNumber: bill.billNumber,
-        createdAt: new Date().toISOString(),
-        grandTotal: calculateTotal(bill),
-        savedAt: new Date().toISOString()
-      };
-
-      // Save to localStorage as backup
-      try {
-        const existingBackups = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
-        existingBackups.push(savedBill);
-        localStorage.setItem('billing_savedBills_backup', JSON.stringify(existingBackups));
-        console.log('Bill saved locally as backup:', savedBill.billNumber);
-      } catch (backupError) {
-        console.error('Failed to save local backup:', backupError);
-      }
+      // Bill successfully saved to database
+      console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
 
       const now = new Date();
       
@@ -1077,25 +989,8 @@ useEffect(() => {
         throw new Error(responseData.message || 'Failed to create bill');
       }
 
-      // Bill successfully saved - create local backup
-      const savedBill = {
-        ...requestBody,
-        _id: responseData._id || responseData.bill?._id,
-        billNumber: bill.billNumber,
-        createdAt: new Date().toISOString(),
-        grandTotal: calculateTotal(bill),
-        savedAt: new Date().toISOString()
-      };
-
-      // Save to localStorage as backup
-      try {
-        const existingBackups = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
-        existingBackups.push(savedBill);
-        localStorage.setItem('billing_savedBills_backup', JSON.stringify(existingBackups));
-        console.log('Bill saved locally as backup:', savedBill.billNumber);
-      } catch (backupError) {
-        console.error('Failed to save local backup:', backupError);
-      }
+      // Bill successfully saved to database
+      console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
 
       const now = new Date();
       const date = now.toLocaleDateString('ta-IN');
@@ -1465,52 +1360,69 @@ th {
   }
 };
 
-const editBill = (bill) => {
-  // Check if this bill is already open in a tab
-  const existingTabIndex = openBills.findIndex(b => b.billNumber === bill.billNumber);
-  
-  if (existingTabIndex >= 0) {
-    // Switch to the existing tab
-    setTabIndex(existingTabIndex);
-    return;
+const editBill = async (bill) => {
+  try {
+    // Fetch full bill details from database
+    console.log('🔍 Loading bill for editing:', bill._id);
+    const response = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/${bill._id}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to load bill details');
+    }
+    
+    const fullBill = await response.json();
+    
+    // Check if this bill is already open in a tab
+    const existingTabIndex = openBills.findIndex(b => b.billNumber === bill.billNumber);
+    
+    if (existingTabIndex >= 0) {
+      // Switch to the existing tab
+      setTabIndex(existingTabIndex);
+      return;
+    }
+
+    const newBill = {
+      id: Date.now(),
+      _id: fullBill._id, // Include the MongoDB _id for updates
+      billNumber: fullBill.billNumber,
+      billItems: fullBill.items.map(item => ({
+        productId: item.productId || '',
+        quantity: item.quantity.toString(),
+        productName: item.nameTamil || '',
+        productNameTamil: item.nameTamil || '',
+        price: item.price || 0,
+        productSearch: item.nameTamil || ''
+      })),
+      activeRow: 0,
+      activeField: 'productSearch',
+      productSearch: '',
+      showProductDropdown: false,
+      isPrinting: false,
+      isExistingBill: true,
+      customerName: fullBill.customerName || 'Walk-in Customer',
+      mobileNumber: fullBill.mobileNumber || '0000000000'
+    };
+
+    // If no items, add an empty row
+    if (newBill.billItems.length === 0) {
+      newBill.billItems.push({
+        productId: '',
+        quantity: '',
+        productName: '',
+        productNameTamil: '',
+        price: 0,
+        productSearch: ''
+      });
+    }
+
+    setOpenBills([...openBills, newBill]);
+    setTabIndex(openBills.length);
+    console.log('✅ Bill loaded for editing');
+    
+  } catch (error) {
+    console.error('Error loading bill for edit:', error);
+    alert('Failed to load bill for editing. Please try again.');
   }
-
-  const newBill = {
-    id: Date.now(),
-    _id: bill._id, // Include the MongoDB _id for updates
-    billNumber: bill.billNumber,
-    billItems: bill.items.map(item => ({
-      productId: item.productId || '',
-      quantity: item.quantity.toString(),
-      productName: item.nameTamil || '',
-      productNameTamil: item.nameTamil || '',
-      price: item.price || 0,
-      productSearch: item.nameTamil || ''
-    })),
-    activeRow: 0,
-    activeField: 'productSearch',
-    productSearch: '',
-    showProductDropdown: false,
-    isPrinting: false,
-    isExistingBill: true,
-    customerName: bill.customerName || 'Walk-in Customer',
-    mobileNumber: bill.mobileNumber || '0000000000'
-  };
-
-  // If no items, add an empty row
-  if (newBill.billItems.length === 0) {
-    newBill.billItems.push({
-      productId: '',
-      quantity: '',
-      productName: '',
-      productNameTamil: '',
-      price: 0,
-      productSearch: ''
-    });
-  }
-
-  setOpenBills([...openBills, newBill]);
-  setTabIndex(openBills.length);
 };
   return (
     <div className="container mt-4">
@@ -1580,7 +1492,7 @@ const editBill = (bill) => {
             <div className="card">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h4>Bill History</h4>
-                <div className="d-flex gap-2">
+                <div className="d-flex gap-2 align-items-center">
                   <input 
                     type="date" 
                     className="form-control" 
@@ -1588,11 +1500,11 @@ const editBill = (bill) => {
                     onChange={(e) => setDateFilter(e.target.value)}
                   />
                   <button 
-                    className="btn btn-success btn-sm"
-                    onClick={uploadAllBills}
-                    title="Upload all bills from backup to server"
+                    className="btn btn-outline-primary btn-sm"
+                    onClick={refreshAllData}
+                    title="Refresh data"
                   >
-                    Upload All Bills
+                    🔄 Refresh
                   </button>
                 </div>
               </div>
@@ -1602,27 +1514,39 @@ const editBill = (bill) => {
                 ) : (
                   <>
                     <div className="row mb-4">
-                      <div className="col-md-4">
+                      <div className="col-md-3">
                         <div className="card text-white bg-primary">
-                          <div className="card-body">
-                            <h5 className="card-title">Total Bills</h5>
+                          <div className="card-body text-center">
+                            <h5 className="card-title">📊 Total Bills</h5>
                             <p className="card-text display-6">{dailySummary.billCount}</p>
+                            <small>Bills for {dateFilter}</small>
                           </div>
                         </div>
                       </div>
-                      <div className="col-md-4">
+                      <div className="col-md-3">
                         <div className="card text-white bg-success">
-                          <div className="card-body">
-                            <h5 className="card-title">Total Amount</h5>
+                          <div className="card-body text-center">
+                            <h5 className="card-title">💰 Total Sales</h5>
                             <p className="card-text display-6">₹{dailySummary.totalAmount.toFixed(2)}</p>
+                            <small>Daily revenue</small>
                           </div>
                         </div>
                       </div>
-                      <div className="col-md-4">
+                      <div className="col-md-3">
                         <div className="card text-white bg-info">
-                          <div className="card-body">
-                            <h5 className="card-title">Average Bill</h5>
+                          <div className="card-body text-center">
+                            <h5 className="card-title">📈 Average Bill</h5>
                             <p className="card-text display-6">₹{dailySummary.averageBill.toFixed(2)}</p>
+                            <small>Per transaction</small>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="card text-white bg-warning">
+                          <div className="card-body text-center">
+                            <h5 className="card-title">🕐 Peak Time</h5>
+                            <p className="card-text display-6">--</p>
+                            <small>Coming soon</small>
                           </div>
                         </div>
                       </div>
@@ -1648,16 +1572,25 @@ const editBill = (bill) => {
                               <td>₹{(bill.grandTotal || 0).toFixed(2)}</td>
                               <td>
                                 <button 
-                                  className="btn btn-sm btn-info me-2"
+                                  className="btn btn-sm btn-info me-1"
                                   onClick={() => editBill(bill)}
+                                  title="Edit this bill"
                                 >
-                                  Edit
+                                  ✏️ Edit
                                 </button>
                                 <button 
-                                  className="btn btn-sm btn-primary"
+                                  className="btn btn-sm btn-primary me-1"
                                   onClick={() => reprintBill(bill)}
+                                  title="Reprint this bill"
                                 >
-                                  Reprint
+                                  🖨️ Reprint
+                                </button>
+                                <button 
+                                  className="btn btn-sm btn-danger"
+                                  onClick={() => deleteBill(bill._id, normalizeBillNumber(bill.billNumber))}
+                                  title="Delete this bill"
+                                >
+                                  🗑️ Delete
                                 </button>
                               </td>
                             </tr>
