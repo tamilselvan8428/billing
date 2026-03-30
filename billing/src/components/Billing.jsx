@@ -821,6 +821,9 @@ useEffect(() => {
 
       // Bill successfully saved to database
       console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
+      
+      // Refresh bill history to update totals
+      await fetchBillHistory();
 
       const now = new Date();
       
@@ -1027,6 +1030,9 @@ useEffect(() => {
 
       // Bill successfully saved to database
       console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
+      
+      // Refresh bill history to update totals
+      await fetchBillHistory();
       } catch (saveError) {
         console.error('Error saving bill to database:', saveError);
         alert(`Failed to save bill: ${saveError.message}`);
