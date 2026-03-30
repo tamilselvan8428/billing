@@ -387,6 +387,15 @@ useEffect(() => {
     fetchBillHistory();
   }, [dateFilter]);
 
+  // Auto-refresh bill history every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchBillHistory();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [dateFilter]);
+
   // Upload all bills from backup to server
   const uploadAllBills = async () => {
     try {
@@ -1527,13 +1536,6 @@ const editBill = async (bill) => {
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
                   />
-                  <button 
-                    className="btn btn-outline-primary btn-sm"
-                    onClick={refreshAllData}
-                    title="Refresh data"
-                  >
-                    🔄 Refresh
-                  </button>
                 </div>
               </div>
               <div className="card-body">
@@ -1541,40 +1543,31 @@ const editBill = async (bill) => {
                   <div className="text-center">Loading...</div>
                 ) : (
                   <>
-                    <div className="row mb-4">
-                      <div className="col-md-3">
+                    <div className="row mb-3">
+                      <div className="col-md-4">
                         <div className="card text-white bg-primary">
                           <div className="card-body text-center">
-                            <h5 className="card-title">📊 Total Bills</h5>
-                            <p className="card-text display-6">{dailySummary.billCount}</p>
-                            <small>Bills for {dateFilter}</small>
+                            <h5 className="card-title">� Total Amount</h5>
+                            <p className="card-text display-6">₹{dailySummary.totalAmount.toFixed(2)}</p>
+                            <small>Today's sales</small>
                           </div>
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-4">
                         <div className="card text-white bg-success">
                           <div className="card-body text-center">
-                            <h5 className="card-title">💰 Total Sales</h5>
-                            <p className="card-text display-6">₹{dailySummary.totalAmount.toFixed(2)}</p>
-                            <small>Daily revenue</small>
+                            <h5 className="card-title">🧾 Bills Count</h5>
+                            <p className="card-text display-6">{dailySummary.billCount}</p>
+                            <small>Transactions today</small>
                           </div>
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-4">
                         <div className="card text-white bg-info">
                           <div className="card-body text-center">
                             <h5 className="card-title">📈 Average Bill</h5>
                             <p className="card-text display-6">₹{dailySummary.averageBill.toFixed(2)}</p>
                             <small>Per transaction</small>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-md-3">
-                        <div className="card text-white bg-warning">
-                          <div className="card-body text-center">
-                            <h5 className="card-title">🕐 Peak Time</h5>
-                            <p className="card-text display-6">--</p>
-                            <small>Coming soon</small>
                           </div>
                         </div>
                       </div>
