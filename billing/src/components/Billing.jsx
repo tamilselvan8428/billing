@@ -399,6 +399,33 @@ useEffect(() => {
 
       console.log(`Starting upload of ${backupBills.length} bills...`);
       let successCount = 0;
+      
+      for (const bill of backupBills) {
+        try {
+          const response = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/bills', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bill)
+          });
+          
+          if (response.ok) {
+            successCount++;
+            console.log(`✅ Uploaded bill: ${bill.billNumber}`);
+          } else {
+            console.error(`❌ Failed to upload bill: ${bill.billNumber}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error uploading bill ${bill.billNumber}:`, error);
+        }
+      }
+      
+      alert(`Upload complete! ${successCount}/${backupBills.length} bills uploaded successfully.`);
+    } catch (error) {
+      console.error('Error during upload:', error);
+      alert('Failed to upload bills. Please try again.');
+    }
+  };
+
   const loadSavedContacts = async () => {
     try {
       const response = await fetch('https://billing-server-gaha.onrender.com/api/contacts');
@@ -991,6 +1018,12 @@ useEffect(() => {
 
       // Bill successfully saved to database
       console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
+      } catch (saveError) {
+        console.error('Error saving bill to database:', saveError);
+        alert(`Failed to save bill: ${saveError.message}`);
+        updateBillState(billId, { isPrinting: false });
+        return;
+      }
 
       const now = new Date();
       const date = now.toLocaleDateString('ta-IN');
@@ -1160,11 +1193,6 @@ useEffect(() => {
       };
     } catch (err) {
       console.error('Error creating bill:', err);
-      alert(`Error: ${err.message}`);
-      updateBillState(billId, { isPrinting: false });
-    }
-    } catch (err) {
-      console.error('Unexpected error in handlePrint:', err);
       alert(`Error: ${err.message}`);
       updateBillState(billId, { isPrinting: false });
     } finally {
@@ -1607,7 +1635,7 @@ const editBill = async (bill) => {
       </ErrorBoundary>
     </div>
   );
-};
+}
 
 const BillForm = ({
   bill,
@@ -1846,6 +1874,6 @@ const BillForm = ({
       </div>
     </>
   );
-} // Added closing brace here
+}
 
 export default Billing;
