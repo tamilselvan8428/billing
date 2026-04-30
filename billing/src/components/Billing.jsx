@@ -932,21 +932,35 @@ useEffect(() => {
       setTimeout(() => {
         iframe.contentWindow.print();
         document.body.removeChild(iframe);
-        updateBillState(billId, {
-          isPrinting: false,
-          billItems: [{ 
-            productId: '', 
-            quantity: '', 
-            productName: '', 
-            productNameTamil: '',
-            price: 0,
-            productSearch: ''
-          }],
-          activeRow: 0,
-          activeField: 'productSearch',
-          productSearch: '',
-          showProductDropdown: false
-        });
+        
+        // Check if this is an edited bill (has _id) and close the tab after printing
+        const bill = openBills.find(b => b.id === billId);
+        const isEditedBill = Boolean(bill?._id);
+        
+        if (isEditedBill) {
+          // Find the index of this bill and close the tab
+          const billIndex = openBills.findIndex(b => b.id === billId);
+          if (billIndex !== -1) {
+            closeBill(billIndex);
+          }
+        } else {
+          // For new bills, just reset the form as before
+          updateBillState(billId, {
+            isPrinting: false,
+            billItems: [{ 
+              productId: '', 
+              quantity: '', 
+              productName: '', 
+              productNameTamil: '',
+              price: 0,
+              productSearch: ''
+            }],
+            activeRow: 0,
+            activeField: 'productSearch',
+            productSearch: '',
+            showProductDropdown: false
+          });
+        }
       }, 200);
       
       // Auto-focus on the first product search field after printing
@@ -1189,21 +1203,35 @@ useEffect(() => {
         setTimeout(() => {
           printWindow.print();
           printWindow.close();
-          updateBillState(billId, {
-            isPrinting: false,
-            billItems: [{ 
-              productId: '', 
-              quantity: '', 
-              productName: '', 
-              productNameTamil: '',
-              price: 0,
-              productSearch: ''
-            }],
-            activeRow: 0,
-            activeField: 'productSearch',
-            productSearch: '',
-            showProductDropdown: false
-          });
+          
+          // Check if this is an edited bill (has _id) and close the tab after printing
+          const bill = openBills.find(b => b.id === billId);
+          const isEditedBill = Boolean(bill?._id);
+          
+          if (isEditedBill) {
+            // Find the index of this bill and close the tab
+            const billIndex = openBills.findIndex(b => b.id === billId);
+            if (billIndex !== -1) {
+              closeBill(billIndex);
+            }
+          } else {
+            // For new bills, just reset the form as before
+            updateBillState(billId, {
+              isPrinting: false,
+              billItems: [{ 
+                productId: '', 
+                quantity: '', 
+                productName: '', 
+                productNameTamil: '',
+                price: 0,
+                productSearch: ''
+              }],
+              activeRow: 0,
+              activeField: 'productSearch',
+              productSearch: '',
+              showProductDropdown: false
+            });
+          }
         }, 200);
       };
     } catch (err) {
