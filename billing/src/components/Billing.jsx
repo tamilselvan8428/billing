@@ -8,7 +8,7 @@ class ErrorBoundary extends React.Component {
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
 
@@ -122,7 +122,6 @@ const Billing = () => {
   
   // Shared state with caching
   const [products, setProducts] = useState([]);
-  const [savedContacts, setSavedContacts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [error, setError] = useState(null);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -133,35 +132,7 @@ const Billing = () => {
   const quantityRefs = useRef([]);
   const dropdownRefs = useRef(null);
 
-  // Request queue to prevent overwhelming the server
-  const requestQueue = useRef([]);
-  const isProcessingQueue = useRef(false);
-
-  const processQueue = async () => {
-    if (isProcessingQueue.current || requestQueue.current.length === 0) {
-      return;
-    }
-
-    isProcessingQueue.current = true;
-    
-    while (requestQueue.current.length > 0) {
-      const request = requestQueue.current.shift();
-      try {
-        await request();
-        // Add delay between queue items
-        await new Promise(resolve => setTimeout(resolve, 300));
-      } catch (error) {
-        console.error('Queue request failed:', error);
-      }
-    }
-    
-    isProcessingQueue.current = false;
-  };
-
-  const addToQueue = (request) => {
-    requestQueue.current.push(request);
-    processQueue();
-  };
+  // Unused queue implementation removed to resolve ESLint warnings
   // Helper function to fetch with retry for 429 errors and rate limiting protection
   const fetchWithRetry = async (url, options = {}, retries = 5, delay = 2000) => {
     for (let i = 0; i < retries; i++) {
@@ -296,8 +267,6 @@ useEffect(() => {
       ]);
       
       if (contactsRes.status === 'fulfilled' && contactsRes.value.ok) {
-        const contactsData = await contactsRes.value.json();
-        setSavedContacts(contactsData.contacts || []);
         console.log('✅ Contacts loaded');
       }
       
@@ -362,11 +331,7 @@ useEffect(() => {
       alert('Failed to delete bill. Please try again.');
     }
   };
-  const refreshAllData = async () => {
-    console.log('🔄 Manual refresh triggered...');
-    setLastDataFetch(0); // Reset cache to force refresh
-    await loadAllDataBalanced();
-  };
+
   
   // Call balanced loading function when component mounts
   useEffect(() => {
@@ -396,56 +361,7 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [dateFilter]);
 
-  // Upload all bills from backup to server
-  const uploadAllBills = async () => {
-    try {
-      const backupBills = JSON.parse(localStorage.getItem('billing_savedBills_backup') || '[]');
-      
-      if (backupBills.length === 0) {
-        alert('No bills in backup to upload.');
-        return;
-      }
 
-      console.log(`Starting upload of ${backupBills.length} bills...`);
-      let successCount = 0;
-      
-      for (const bill of backupBills) {
-        try {
-          const response = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/bills', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(bill)
-          });
-          
-          if (response.ok) {
-            successCount++;
-            console.log(`✅ Uploaded bill: ${bill.billNumber}`);
-          } else {
-            console.error(`❌ Failed to upload bill: ${bill.billNumber}`);
-          }
-        } catch (error) {
-          console.error(`❌ Error uploading bill ${bill.billNumber}:`, error);
-        }
-      }
-      
-      alert(`Upload complete! ${successCount}/${backupBills.length} bills uploaded successfully.`);
-    } catch (error) {
-      console.error('Error during upload:', error);
-      alert('Failed to upload bills. Please try again.');
-    }
-  };
-
-  const loadSavedContacts = async () => {
-    try {
-      const response = await fetch('https://billing-server-gaha.onrender.com/api/contacts');
-      if (response.ok) {
-        const data = await response.json();
-        setSavedContacts(data.contacts || []);
-      }
-    } catch (err) {
-      console.error('Error loading contacts:', err);
-    }
-  };
 
   const fetchBillHistory = async () => {
     try {
@@ -1267,9 +1183,8 @@ useEffect(() => {
       billToPrint = await response.json();
     }  
 
-    const now = new Date();
-    const date = now.toLocaleDateString('ta-IN');
-    const time = now.toLocaleTimeString('ta-IN');
+
+
 
     const billContent = `
       <!DOCTYPE html>
@@ -1680,47 +1595,9 @@ const BillForm = ({
   onClearBill,
   productSearchRefs,
   quantityRefs,
-  dropdownRefs,
   calculateTotal
 }) => {
-  const [showContactDropdown, setShowContactDropdown] = useState(false);
-  const [contactSearch, setContactSearch] = useState('');
-  const dropdownContainerRef = useRef(null);
 
-  const handleCustomerNameKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-    } else if (e.key === 'ArrowDown') {
-      //   mobileNumberRefs.current.focus();
-      // }
-    } else if (e.key === 'ArrowDown' && filteredContacts.length > 0) {
-      e.preventDefault();
-      setShowContactDropdown(true);
-      const firstItem = document.querySelector('.contact-item');
-      if (firstItem) firstItem.focus();
-    } else if (e.key === 'Escape') {
-      setShowContactDropdown(false);
-    }
-  };
-
-  const handleCustomerNameBlur = (e) => {
-    // Use setTimeout to allow click events on dropdown items to fire first
-    setTimeout(() => {
-      // Check if the newly focused element is not inside our dropdown
-      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(document.activeElement)) {
-        setShowContactDropdown(false);
-      }
-    }, 200);
-  };
-
-  const handleMobileNumberKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      // if (productSearchRefs.current[0]) {
-      //   productSearchRefs.current[0].focus();
-      // }
-    }
-  };
 
   return (
     <>
@@ -1798,7 +1675,7 @@ const BillForm = ({
                           <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                             {filteredProducts.length > 0 ? (
                               <ul className="list-group list-group-flush">
-                                {filteredProducts.map((product, idx) => (
+                                {filteredProducts.map((product) => (
                                   <li 
                                     key={product._id}
                                     className={`list-group-item list-group-item-action p-2 product-item-${index}`}

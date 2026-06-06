@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import Billing from './components/Billing';
 import ProductManagement from './components/ProductManagement';
 import StockManagement from './components/StockManagement';
+import SalesAnalysis from './components/SalesAnalysis';
 
 function App() {
   const [activeTab, setActiveTab] = useState('billing');
@@ -81,6 +82,15 @@ function App() {
               Stock Entry
             </Link>
           </li>
+          <li className="nav-item">
+            <Link 
+              className={`nav-link ${activeTab === 'analysis' ? 'active' : ''}`}
+              to="/analysis"
+              onClick={() => setActiveTab('analysis')}
+            >
+              Sales Analysis
+            </Link>
+          </li>
         </ul>
 
         <div className="tab-content mt-3">
@@ -88,6 +98,7 @@ function App() {
             <Route path="/" element={<Billing />} />
             <Route path="/products" element={<ProductManagement />} />
             <Route path="/stock" element={<StockManagement />} />
+            <Route path="/analysis" element={<SalesAnalysis />} />
           </Routes>
         </div>
       </div>
