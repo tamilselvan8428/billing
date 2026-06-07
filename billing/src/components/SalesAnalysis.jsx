@@ -4,6 +4,13 @@ import {
 } from 'recharts';
 
 const SalesAnalysis = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [securityAnswer, setSecurityAnswer] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [forgotPasswordError, setForgotPasswordError] = useState('');
+  
   const [salesData, setSalesData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('month');
@@ -12,6 +19,29 @@ const SalesAnalysis = () => {
     totalBills: 0,
     averageAOV: 0
   });
+
+  const handlePasswordSubmit = (e) => {
+    e.preventDefault();
+    if (password === 'lax') {
+      setIsAuthenticated(true);
+      setAuthError('');
+      setPassword('');
+    } else {
+      setAuthError('Incorrect password');
+    }
+  };
+
+  const handleForgotPassword = (e) => {
+    e.preventDefault();
+    if (securityAnswer === '26/04/2023') {
+      alert('Your password is: lax');
+      setShowForgotPassword(false);
+      setSecurityAnswer('');
+      setForgotPasswordError('');
+    } else {
+      setForgotPasswordError('Incorrect answer');
+    }
+  };
 
   const fetchSalesData = useCallback(async () => {
     try {
@@ -75,6 +105,80 @@ const SalesAnalysis = () => {
 
   return (
     <div className="container-fluid mt-2 px-0">
+      {!isAuthenticated ? (
+        <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
+          <div className="card shadow" style={{ maxWidth: '400px', width: '100%' }}>
+            <div className="card-body p-4">
+              {!showForgotPassword ? (
+                <>
+                  <h4 className="text-center mb-4">🔒 Sales Analysis Lock</h4>
+                  <form onSubmit={handlePasswordSubmit}>
+                    <div className="mb-3">
+                      <label htmlFor="password" className="form-label">Enter Password</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        id="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter password"
+                        autoFocus
+                      />
+                      {authError && <div className="text-danger small mt-2">{authError}</div>}
+                    </div>
+                    <button type="submit" className="btn btn-primary w-100 mb-3">
+                      Unlock
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-link w-100 text-decoration-none"
+                      onClick={() => {
+                        setShowForgotPassword(true);
+                        setAuthError('');
+                      }}
+                    >
+                      Forgot Password?
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <h4 className="text-center mb-4">🔐 Security Question</h4>
+                  <form onSubmit={handleForgotPassword}>
+                    <div className="mb-3">
+                      <label className="form-label fw-bold">When the shop started?</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={securityAnswer}
+                        onChange={(e) => setSecurityAnswer(e.target.value)}
+                        placeholder="Enter answer (DD/MM/YYYY)"
+                        autoFocus
+                      />
+                      {forgotPasswordError && <div className="text-danger small mt-2">{forgotPasswordError}</div>}
+                    </div>
+                    <button type="submit" className="btn btn-success w-100 mb-3">
+                      Submit Answer
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-link w-100 text-decoration-none"
+                      onClick={() => {
+                        setShowForgotPassword(false);
+                        setSecurityAnswer('');
+                        setForgotPasswordError('');
+                      }}
+                    >
+                      Back to Password
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
         <div>
           <h2 className="fw-bold mb-0">Sales Analytics Dashboard</h2>
@@ -92,6 +196,15 @@ const SalesAnalysis = () => {
             <option value="month">Last 30 Days</option>
             <option value="year">Last 12 Months</option>
           </select>
+          <button 
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => {
+              setIsAuthenticated(false);
+              setPassword('');
+            }}
+          >
+            🔒 Lock
+          </button>
         </div>
       </div>
 
@@ -261,6 +374,8 @@ const SalesAnalysis = () => {
               </div>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
     </div>
