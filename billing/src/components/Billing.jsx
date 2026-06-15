@@ -899,89 +899,32 @@ useEffect(() => {
     }
   };
 
-  const handlePrint = async (billId) => {
-    updateBillState(billId, { isPrinting: true });
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
+  const reprintBill = async (bill) => {
     try {
-      const bill = openBills.find(b => b.id === billId);
-      const validItems = bill.billItems
-        .filter(item => item.productId && item.quantity)
-        .map(item => ({
-          productId: item.productId,
-          quantity: parseInt(item.quantity || 0),
-          price: parseFloat(item.price || 0),
-          nameTamil: item.productNameTamil || ''
-        }));
-
-      if (validItems.length === 0) {
-        alert('Please add items to the bill before printing');
-        updateBillState(billId, { isPrinting: false });
-        return;
+      // Set printing state to true if this is an open bill
+      if (bill.id) {
+        updateBillState(bill.id, { isPrinting: true });
       }
-
-      updateBillState(billId, { isPrinting: true });
-
-      try {
-        const isExistingBill = Boolean(bill._id);
-        
-        if (isExistingBill && !bill._id) {
-          throw new Error('Cannot update bill: Missing bill ID');
-        }
-        
-        const url = isExistingBill 
-          ? `https://billing-server-gaha.onrender.com/api/bills/${bill._id}`
-          : 'https://billing-server-gaha.onrender.com/api/bills';
-          
-        const method = isExistingBill ? 'PUT' : 'POST';
-        
-        const requestBody = {
-          items: validItems,
-          customerName: bill.customerName || 'Walk-in Customer',
-          mobileNumber: bill.mobileNumber || '0000000000'
-        };
-        
-        // Only include billNumber for new bills
-        if (!isExistingBill) {
-          requestBody.billNumber = bill.billNumber;
-        }
       
-      const response = await fetchWithRetry(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+      // If this is a bill from history, fetch the full details
+      let billToPrint = bill;
+      if (!bill.items && bill._id) {
+        const response = await fetch(`https://billing-server-gaha.onrender.com/api/bills/${bill._id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch bill details');
+        }
+        billToPrint = await response.json();
+      }  
 
-      const responseData = await response.json();
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'absolute';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '-9999px';
+      iframe.style.width = '80mm';
+      iframe.style.height = '0px';
+      document.body.appendChild(iframe);
 
-      if (!response.ok) {
-        throw new Error(responseData.message || 'Failed to create bill');
-      }
-
-      // Bill successfully saved to database
-      console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
-      
-      // Refresh bill history to update totals
-      await fetchBillHistory();
-      } catch (saveError) {
-        console.error('Error saving bill to database:', saveError);
-        alert(`Failed to save bill: ${saveError.message}`);
-        updateBillState(billId, { isPrinting: false });
-        return;
-      }
-
-      const now = new Date();
-      const date = now.toLocaleDateString('ta-IN');
-      const time = now.toLocaleTimeString('ta-IN');
-
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('Popup was blocked. Please allow popups for this site.');
-        updateBillState(billId, { isPrinting: false });
-        return;
-      }
-
-      const validBillItems = bill.billItems.filter(item => item.productId && item.quantity);
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
 
       const billContent = `
         <!DOCTYPE html>
@@ -990,70 +933,50 @@ useEffect(() => {
             <title>ராஜா ஸ்னாக்ஸ் பில்</title>
             <meta charset="UTF-8">
             <style>
-              @page { size: 80mm auto; margin: 0; }
-              body { 
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              html, body {
                 width: 80mm;
                 margin: 0;
-                padding: 2mm;
+                padding: 0;
                 font-family: Arial, sans-serif;
                 font-size: 14px;
-                line-height: 1.2;
               }
-              .header { 
-                text-align: center; 
-                margin-bottom: 2mm; 
-              }
-              .shop-name { 
-                font-weight: bold; 
-                font-size: 16px; 
-                margin: 0; 
-              }
-              .bill-title { 
-                font-weight: bold; 
-                font-size: 15px; 
-                margin: 1px 0; 
-              }
-              .contact { 
-                font-size: 12px; 
-                margin: 1px 0 2px 0; 
-              }
-              .customer-info { 
+              .header {
+                text-align: center;
                 margin-bottom: 2mm;
-                display: flex;
-                justify-content: space-between;
               }
-              .customer-details {
-                text-align: left;
+              table {
+                width: 100%;
+                border-collapse: collapse;
               }
-              .date-time {
-                text-align: right;
+              th, td {
+                padding: 2mm 0;
               }
-              table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                margin-bottom: 2mm; 
+              .item-row,
+              tr,
+              td,
+              th {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
               }
-              th, td { 
-                padding: 2mm 0; 
-                text-align: left; 
-              }
-              th { 
-                border-bottom: 1px dashed #000; 
-              }
-              .item-row td { 
-                border-bottom: 1px dashed #ddd; 
-                padding: 2mm 0; 
-              }
-              .total-row { 
-                font-weight: bold; 
-                border-top: 1px dashed #000; 
-                border-bottom: 1px dashed #000; 
+              .total-row {
+                font-weight: bold;
+                border-top: 1px dashed #000;
+                border-bottom: 1px dashed #000;
                 font-size: 16px;
               }
-              .footer { 
-                text-align: center; 
-                margin-top: 2mm; 
-                font-size: 12px; 
+              .footer {
+                text-align: center;
+                margin-top: 2mm;
+                font-size: 12px;
+              }
+              @media print {
+                body {
+                  overflow: visible !important;
+                }
               }
             </style>
           </head>
@@ -1066,11 +989,11 @@ useEffect(() => {
             
             <div class="customer-info">
               <div class="customer-details">
-                <div>பில் எண்: ${bill.billNumber}</div>
+                <div>பில் எண்: ${billToPrint.billNumber}</div>
               </div>
               <div class="date-time">
-                <div>தேதி: ${date}</div>
-                <div>நேரம்: ${time}</div>
+                <div>தேதி: ${new Date(billToPrint.date || billToPrint.createdAt).toLocaleDateString('ta-IN')}</div>
+                <div>நேரம்: ${new Date(billToPrint.date || billToPrint.createdAt).toLocaleTimeString('ta-IN')}</div>
               </div>
             </div>
             
@@ -1080,18 +1003,18 @@ useEffect(() => {
                   <th width="10%">#</th>
                   <th width="40%">பொருள்</th>
                   <th width="15%">அளவு</th>
-                  <th width="20%" style="padding-right: 10px;">விலை</th>
-                  <th width="15%">மொத்தம்</th>
+                  <th width="15%">விலை</th>
+                  <th width="20%">மொத்தம்</th>
                 </tr>
               </thead>
               <tbody>
-                ${validBillItems.map((item, idx) => `
+                ${billToPrint.items.map((item, idx) => `
                   <tr class="item-row">
                     <td>${idx + 1}</td>
-                    <td>${item.productNameTamil || '-'}</td>
+                    <td>${item.nameTamil || (item.product && item.product.nameTamil) || '-'}</td>
                     <td>${item.quantity}</td>
-                    <td style="padding-right: 10px;">₹${(item.price || 0).toFixed(2)}</td>
-                    <td>₹${((item.price || 0) * parseInt(item.quantity || 0)).toFixed(2)}</td>
+                    <td>₹${(item.price || 0).toFixed(2)}</td>
+                    <td>₹${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1100,7 +1023,7 @@ useEffect(() => {
             <table>
               <tr class="total-row">
                 <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-                <td>₹${calculateTotal(bill).toFixed(2)}</td>
+                <td>₹${(billToPrint.grandTotal || billToPrint.totalAmount || 0).toFixed(2)}</td>
               </tr>
             </table>
             
@@ -1111,240 +1034,35 @@ useEffect(() => {
         </html>
       `;
 
-      printWindow.document.open();
-      printWindow.document.write(billContent);
-      printWindow.document.close();
+      iframeDoc.open();
+      iframeDoc.write(billContent);
+      iframeDoc.close();
 
-      printWindow.onload = () => {
+      await new Promise((resolve) => {
         setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-          
-          // Check if this is an edited bill (has _id) and close the tab after printing
-          const bill = openBills.find(b => b.id === billId);
-          const isEditedBill = Boolean(bill?._id);
-          
-          if (isEditedBill) {
-            // Find the index of this bill and close the tab
-            const billIndex = openBills.findIndex(b => b.id === billId);
-            if (billIndex !== -1) {
-              closeBill(billIndex);
-            }
-          } else {
-            // For new bills, just reset the form as before
-            updateBillState(billId, {
-              isPrinting: false,
-              billItems: [{ 
-                productId: '', 
-                quantity: '', 
-                productName: '', 
-                productNameTamil: '',
-                price: 0,
-                productSearch: ''
-              }],
-              activeRow: 0,
-              activeField: 'productSearch',
-              productSearch: '',
-              showProductDropdown: false
-            });
-          }
-        }, 200);
-      };
-    } catch (err) {
-      console.error('Error creating bill:', err);
-      alert(`Error: ${err.message}`);
-      updateBillState(billId, { isPrinting: false });
-    } finally {
-      // Ensure printing state is reset
-      updateBillState(billId, { isPrinting: false });
-    }
-
-  };
-
-  const reprintBill = async (bill) => {
-  try {
-    // Set printing state to true if this is an open bill
-    if (bill.id) {
-      updateBillState(bill.id, { isPrinting: true });
-    }
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      throw new Error('Popup was blocked. Please allow popups for this site.');
-    }
-    
-    // If this is a bill from history, fetch the full details
-    let billToPrint = bill;
-    if (!bill.items && bill._id) {
-      const response = await fetch(`https://billing-server-gaha.onrender.com/api/bills/${bill._id}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch bill details');
-      }
-      billToPrint = await response.json();
-    }  
-
-
-
-
-    const billContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>ராஜா ஸ்னாக்ஸ் பில்</title>
-          <meta charset="UTF-8">
-          <style>
-@page {
-  size: 80mm auto;
-  margin: 0;
-}
-
-html, body {
-  width: 80mm;
-  margin: 0;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  font-size: 14px;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 2mm;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th, td {
-  padding: 2mm 0;
-}
-
-.item-row,
-tr,
-td,
-th {
-  page-break-inside: avoid !important;
-  break-inside: avoid !important;
-}
-
-.total-row {
-  font-weight: bold;
-  border-top: 1px dashed #000;
-  border-bottom: 1px dashed #000;
-  font-size: 16px;
-}
-
-.footer {
-  text-align: center;
-  margin-top: 2mm;
-  font-size: 12px;
-}
-
-@media print {
-  body {
-    overflow: visible !important;
-  }
-}
-</style>
-
-        </head>
-        <body>
-          <div class="header">
-            <p class="shop-name">ராஜா ஸ்னாக்ஸ்</p>
-            <p class="bill-title">கேஷ் பில்</p>
-            <p class="contact">தொலைபேசி: 9842263860</p>
-          </div>
-          
-          <div class="customer-info">
-            <div class="customer-details">
-              <div>பில் எண்: ${billToPrint.billNumber}</div>
-            </div>
-            <div class="date-time">
-              <div>தேதி: ${new Date(billToPrint.createdAt).toLocaleDateString('ta-IN')}</div>
-              <div>நேரம்: ${new Date(billToPrint.createdAt).toLocaleTimeString('ta-IN')}</div>
-            </div>
-          </div>
-          
-          <table>
-            <thead>
-              <tr>
-                <th width="10%">#</th>
-                <th width="40%">பொருள்</th>
-                <th width="15%">அளவு</th>
-                <th width="15%">விலை</th>
-                <th width="20%">மொத்தம்</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${billToPrint.items.map((item, idx) => `
-                <tr class="item-row">
-                  <td>${idx + 1}</td>
-                  <td>${item.product?.nameTamil || '-'}</td>
-                  <td>${item.quantity}</td>
-                  <td>₹${(item.price || 0).toFixed(2)}</td>
-                  <td>₹${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          
-          <table>
-            <tr class="total-row">
-              <td colspan="4" style="text-align: right;">மொத்த தொகை:</td>
-              <td>₹${(billToPrint.totalAmount || 0).toFixed(2)}</td>
-            </tr>
-          </table>
-          
-          <div class="footer">
-            <p>என்றும் உங்களுடன் ராஜா ஸ்னாக்ஸ் !!! மீண்டும் வருக...</p>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(billContent);
-    printWindow.document.close();
-
-    await new Promise((resolve, reject) => {
-      printWindow.onload = () => {
-        try {
-          setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-            resolve();
-          }, 100);
-        } catch (err) {
-          printWindow.close();
-          reject(err);
-        }
-      };
-      
-      // Fallback in case onload doesn't fire
-      setTimeout(() => {
-        if (!printWindow.closed) {
           try {
-            printWindow.print();
-            printWindow.close();
+            iframe.contentWindow.print();
+            document.body.removeChild(iframe);
             resolve();
           } catch (err) {
-            printWindow.close();
-            reject(err);
+            console.error('Error during printing reprint iframe:', err);
+            if (document.body.contains(iframe)) {
+              document.body.removeChild(iframe);
+            }
+            resolve();
           }
-        }
-      }, 1000);
-    });
-  } catch (err) {
-    console.error('Error in reprintBill:', err);
-    alert(`Error reprinting bill: ${err.message}`);
-  } finally {
-    // Ensure we always reset the printing state
-    if (bill?.id) {
-      updateBillState(bill.id, { isPrinting: false });
+        }, 200);
+      });
+    } catch (err) {
+      console.error('Error in reprintBill:', err);
+      alert(`Error reprinting bill: ${err.message}`);
+    } finally {
+      // Ensure we always reset the printing state
+      if (bill?.id) {
+        updateBillState(bill.id, { isPrinting: false });
+      }
     }
-  }
-};
+  };
 
 const editBill = async (bill) => {
   try {
@@ -1454,7 +1172,7 @@ const editBill = async (bill) => {
                 onProductSearch={(value, index) => handleProductSearch(bill.id, value, index)}
                 onSelectProduct={(product, index) => selectProduct(bill.id, product, index)}
                 onRemoveItem={(index) => removeBillItem(bill.id, index)}
-                onPrint={() => handlePrint(bill.id)}
+                onPrint={() => handleDirectPrint(bill.id)}
                 onProductKeyDown={(e, index) => handleProductKeyDown(bill.id, e, index)}
                 onQuantityKeyDown={(e, index) => handleQuantityKeyDown(bill.id, e, index)}
                 onClearBill={() => resetForm(bill.id)}
