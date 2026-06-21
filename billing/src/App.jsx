@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { API_URL } from './config';
 import Billing from './components/Billing';
 import ProductManagement from './components/ProductManagement';
 import StockManagement from './components/StockManagement';
@@ -10,17 +11,13 @@ function App() {
   useEffect(() => {
     const keepAliveInterval = setInterval(async () => {
       try {
-        const baseUrl = import.meta.env.PROD 
-          ? 'https://billing-server-gaha.onrender.com' 
-          : '';
-        
         // Multiple keep-alive strategies for maximum reliability
         const promises = [
-          fetch(`${baseUrl}/api/keep-alive`, {
+          fetch(`${API_URL}/api/keep-alive`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
           }),
-          fetch(`${baseUrl}/api/health`, {
+          fetch(`${API_URL}/api/health`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
           })
@@ -36,10 +33,7 @@ function App() {
     // Also ping immediately when app loads
     const initialPing = async () => {
       try {
-        const baseUrl = import.meta.env.PROD 
-          ? 'https://billing-server-gaha.onrender.com' 
-          : '';
-        await fetch(`${baseUrl}/api/keep-alive`);
+        await fetch(`${API_URL}/api/keep-alive`);
         console.log('🚀 Initial keep-alive sent');
       } catch (error) {
         console.log('Initial keep-alive failed:', error);

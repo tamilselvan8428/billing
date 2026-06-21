@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
+import { API_URL } from '../config';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -229,6 +230,7 @@ useEffect(() => {
 
   window.addEventListener('keydown', handleKeyDown);
   return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [openBills, tabIndex]);
 
 
@@ -249,7 +251,7 @@ useEffect(() => {
       
       // Batch 1: Products (most important)
       console.log('📦 Loading products...');
-      const productsRes = await fetchWithRetry('https://billing-server-gaha.onrender.com/api/products');
+      const productsRes = await fetchWithRetry(`${API_URL}/api/products`);
       if (productsRes.ok) {
         const productsData = await productsRes.json();
         setProducts(productsData || []);
@@ -262,8 +264,8 @@ useEffect(() => {
       // Batch 2: Contacts and History together
       console.log('👥 Loading contacts and history...');
       const [contactsRes, historyRes] = await Promise.allSettled([
-        fetchWithRetry('https://billing-server-gaha.onrender.com/api/contacts'),
-        fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`)
+        fetchWithRetry(`${API_URL}/api/contacts`),
+        fetchWithRetry(`${API_URL}/api/bills?date=${dateFilter}`)
       ]);
       
       if (contactsRes.status === 'fulfilled' && contactsRes.value.ok) {
@@ -281,7 +283,7 @@ useEffect(() => {
       
       // Batch 3: Summary (least critical)
       console.log('📊 Loading summary...');
-      const summaryRes = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`);
+      const summaryRes = await fetchWithRetry(`${API_URL}/api/bills/summary?date=${dateFilter}`);
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setDailySummary({
@@ -312,7 +314,7 @@ useEffect(() => {
 
     try {
       console.log('🗑️ Deleting bill:', billId);
-      const response = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/${billId}`, {
+      const response = await fetchWithRetry(`${API_URL}/api/bills/${billId}`, {
         method: 'DELETE'
       });
 
@@ -336,6 +338,7 @@ useEffect(() => {
   // Call balanced loading function when component mounts
   useEffect(() => {
     loadAllDataBalanced();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -346,10 +349,12 @@ useEffect(() => {
     }, 150); // Slightly longer delay to ensure DOM is ready
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabIndex]); // Only depend on tabIndex, not openBills
 
   useEffect(() => {
     fetchBillHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFilter]);
 
   // Auto-refresh bill history every 30 seconds
@@ -359,6 +364,7 @@ useEffect(() => {
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFilter]);
 
 
@@ -367,8 +373,8 @@ useEffect(() => {
     try {
       setHistoryLoading(true);
       const [historyRes, summaryRes] = await Promise.all([
-        fetch(`https://billing-server-gaha.onrender.com/api/bills?date=${dateFilter}`),
-        fetch(`https://billing-server-gaha.onrender.com/api/bills/summary?date=${dateFilter}`)
+        fetch(`${API_URL}/api/bills?date=${dateFilter}`),
+        fetch(`${API_URL}/api/bills/summary?date=${dateFilter}`)
       ]);
       
       if (!historyRes.ok || !summaryRes.ok) {
@@ -707,8 +713,8 @@ useEffect(() => {
         }
         
         const url = isExistingBill 
-          ? `https://billing-server-gaha.onrender.com/api/bills/${bill._id}`
-          : 'https://billing-server-gaha.onrender.com/api/bills';
+          ? `${API_URL}/api/bills/${bill._id}`
+          : `${API_URL}/api/bills`;
           
         const method = isExistingBill ? 'PUT' : 'POST';
         
@@ -736,7 +742,9 @@ useEffect(() => {
       }
 
       // Bill successfully saved to database
-      console.log('✅ Bill saved to database:', responseData.billNumber || bill.billNumber);
+      const savedBillDoc = responseData.bill || {};
+      const confirmedBillNumber = savedBillDoc.billNumber || bill.billNumber;
+      console.log('✅ Bill saved to database:', confirmedBillNumber);
       
       // Refresh bill history to update totals
       await fetchBillHistory();
@@ -796,7 +804,7 @@ useEffect(() => {
             </div>
             
             <div class="customer-info">
-              <div>பில் எண்: ${bill.billNumber}</div>
+              <div>பில் எண்: ${confirmedBillNumber}</div>
               <div>
                 <div>தேதி: ${date}</div>
                 <div>நேரம்: ${time}</div>
@@ -909,7 +917,7 @@ useEffect(() => {
       // If this is a bill from history, fetch the full details
       let billToPrint = bill;
       if (!bill.items && bill._id) {
-        const response = await fetch(`https://billing-server-gaha.onrender.com/api/bills/${bill._id}`);
+        const response = await fetch(`${API_URL}/api/bills/${bill._id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch bill details');
         }
@@ -1068,7 +1076,7 @@ const editBill = async (bill) => {
   try {
     // Fetch full bill details from database
     console.log('🔍 Loading bill for editing:', bill._id);
-    const response = await fetchWithRetry(`https://billing-server-gaha.onrender.com/api/bills/${bill._id}`);
+    const response = await fetchWithRetry(`${API_URL}/api/bills/${bill._id}`);
     
     if (!response.ok) {
       throw new Error('Failed to load bill details');

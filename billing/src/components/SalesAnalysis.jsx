@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_URL } from '../config';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -46,7 +47,7 @@ const SalesAnalysis = () => {
   const fetchSalesData = useCallback(async () => {
     try {
       setLoading(true);
-      const url = `https://billing-server-gaha.onrender.com/api/sales/history?range=${timeRange}`;
+      const url = `${API_URL}/api/sales/history?range=${timeRange}`;
       const response = await fetch(url);
       const data = await response.json();
       
