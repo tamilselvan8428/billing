@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { API_URL } from '../config';
+import { API_URL, fetchWithRetry } from '../config';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -48,7 +48,7 @@ const SalesAnalysis = () => {
     try {
       setLoading(true);
       const url = `${API_URL}/api/sales/history?range=${timeRange}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
       const data = await response.json();
       
       if (data.success && data.salesData) {

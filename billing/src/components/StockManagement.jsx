@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { API_URL } from '../config';
+import { API_URL, fetchWithRetry } from '../config';
 
 const StockManagement = () => {
   const [products, setProducts] = useState([]);
@@ -77,7 +77,7 @@ const StockManagement = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_URL}/api/products`);
+      const response = await fetchWithRetry(`${API_URL}/api/products`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch products. Status: ${response.status}`);
@@ -269,7 +269,7 @@ const handleUpdateStock = async (index) => {
 
   try {
     // First find the product by name to get its ID
-    const searchResponse = await fetch(
+    const searchResponse = await fetchWithRetry(
       `${API_URL}/api/products/search?name=${encodeURIComponent(
         entry.productNameTamil || entry.productName
       )}`
@@ -285,7 +285,7 @@ const handleUpdateStock = async (index) => {
     const productId = product._id;
 
     // Then update the stock using the ID
-    const updateResponse = await fetch(`${API_URL}/api/products/stock`, {
+    const updateResponse = await fetchWithRetry(`${API_URL}/api/products/stock`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -329,7 +329,7 @@ const handleBulkUpdate = async () => {
   for (const entry of stockEntries) {
     if (entry.productName && entry.newQuantity && !isNaN(entry.newQuantity)) {
       try {
-        const searchResponse = await fetch(
+        const searchResponse = await fetchWithRetry(
           `${API_URL}/api/products/search?name=${encodeURIComponent(
             entry.productNameTamil || entry.productName
           )}`
@@ -355,7 +355,7 @@ const handleBulkUpdate = async () => {
   }
 
   try {
-    const response = await fetch(`${API_URL}/api/products/stock/bulk`, {
+    const response = await fetchWithRetry(`${API_URL}/api/products/stock/bulk`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -398,7 +398,7 @@ const handleBulkUpdate = async () => {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/products/${productId}`, {
+      const response = await fetchWithRetry(`${API_URL}/api/products/${productId}`, {
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
@@ -440,7 +440,7 @@ const handleBulkUpdate = async () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_URL}/api/products/update-by-name`, {
+      const response = await fetchWithRetry(`${API_URL}/api/products/update-by-name`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

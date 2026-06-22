@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
-import { API_URL } from '../config';
+import { API_URL, fetchWithRetry } from '../config';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -134,29 +134,6 @@ const Billing = () => {
   const dropdownRefs = useRef(null);
 
   // Unused queue implementation removed to resolve ESLint warnings
-  // Helper function to fetch with retry for 429 errors and rate limiting protection
-  const fetchWithRetry = async (url, options = {}, retries = 5, delay = 2000) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const response = await fetch(url, options);
-        if (response.status === 429) {
-          if (i === retries - 1) {
-            throw new Error('Server busy - please try again in a moment');
-          }
-          console.log(`⏳ Rate limited, retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 1.5; // More conservative backoff
-          continue;
-        }
-        return response;
-      } catch (error) {
-        if (i === retries - 1) throw error;
-        console.log(`❌ Request failed, retrying in ${delay}ms... (${error.message})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 1.5;
-      }
-    }
-  };
   const updateBillState = (billId, updates) => {
     setOpenBills(prevBills => 
       prevBills.map(bill => 
@@ -373,8 +350,8 @@ useEffect(() => {
     try {
       setHistoryLoading(true);
       const [historyRes, summaryRes] = await Promise.all([
-        fetch(`${API_URL}/api/bills?date=${dateFilter}`),
-        fetch(`${API_URL}/api/bills/summary?date=${dateFilter}`)
+        fetchWithRetry(`${API_URL}/api/bills?date=${dateFilter}`),
+        fetchWithRetry(`${API_URL}/api/bills/summary?date=${dateFilter}`)
       ]);
       
       if (!historyRes.ok || !summaryRes.ok) {
@@ -917,7 +894,7 @@ useEffect(() => {
       // If this is a bill from history, fetch the full details
       let billToPrint = bill;
       if (!bill.items && bill._id) {
-        const response = await fetch(`${API_URL}/api/bills/${bill._id}`);
+        const response = await fetchWithRetry(`${API_URL}/api/bills/${bill._id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch bill details');
         }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { API_URL } from '../config';
+import { API_URL, fetchWithRetry } from '../config';
 
 const ProductManagement = () => {
   const [formData, setFormData] = useState({
@@ -24,7 +24,7 @@ const handleSubmit = async (e) => {
       throw new Error('Please enter a valid price');
     }
 
-    const response = await fetch(`${API_URL}/api/products`, {
+    const response = await fetchWithRetry(`${API_URL}/api/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
