@@ -831,6 +831,7 @@ useEffect(() => {
 
       // Wait for content to load, then print
       setTimeout(() => {
+        iframe.contentWindow.focus();
         iframe.contentWindow.print();
         document.body.removeChild(iframe);
         
@@ -1026,6 +1027,7 @@ useEffect(() => {
       await new Promise((resolve) => {
         setTimeout(() => {
           try {
+            iframe.contentWindow.focus();
             iframe.contentWindow.print();
             document.body.removeChild(iframe);
             resolve();
