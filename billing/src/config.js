@@ -1,5 +1,5 @@
 export const API_URL = import.meta.env.PROD 
-  ? 'https://billingserver-t7zb.onrender.com' 
+  ? 'https://billingserver-22ma.onrender.com' 
   : '';
 
 export const fetchWithRetry = async (url, options = {}, retries = 5, delay = 2000) => {
